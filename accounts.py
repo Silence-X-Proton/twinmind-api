@@ -351,6 +351,26 @@ class AccountPool:
                 "accounts": [a.snapshot() for a in self._accounts],
             }
 
+    def resize(self, new_size: int) -> dict:
+        """Grow or shrink the pool. Shrinking burns (deletes) the removed
+        accounts upstream so nothing lingers."""
+        new_size = max(1, int(new_size))
+        with self._lock:
+            while len(self._accounts) > new_size:
+                acc = self._accounts.pop()
+                try:
+                    acc.burn()
+                except Exception:
+                    pass
+            while len(self._accounts) < new_size:
+                self._accounts.append(self._new_account())
+            self.size = len(self._accounts)
+            self._save()
+            return {
+                "size": len(self._accounts),
+                "available": sum(1 for a in self._accounts if a.available()),
+            }
+
     def add_account(self) -> dict:
         with self._lock:
             acc = self._new_account()

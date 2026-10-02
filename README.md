@@ -13,7 +13,28 @@ no rate limits, no trace left behind**.
 - **Never hits a limit**: rotating account pool + automatic retry + circuit breaker
 - **Burn-after-use**: each account self-deletes (user + Firebase) after its quota — *no name, no trace*
 - **Premium streaming**: long, stable SSE with heartbeats — no mid-stream break on big answers
+- **Admin dashboard** at `/admin`: stats, per-model usage, request detail (in/out tokens + copy), summarize, pool resize, gateway ON/OFF, and a terminal
 - **Cloudflare Tunnel**: expose it publicly with a `trycloudflare.com` URL
+
+---
+
+## ⚡ Google Colab — ONE command (easiest)
+
+Open a Colab cell and paste **this single command**:
+
+```bash
+!curl -fsSL https://raw.githubusercontent.com/Silence-X-Proton/twinmind-api/main/colab.sh | bash
+```
+
+It installs everything, starts the API, opens a Cloudflare tunnel, and prints:
+
+```
+PUBLIC BASE (OpenAI):   https://xxxx.trycloudflare.com/v1
+ADMIN DASHBOARD:        https://xxxx.trycloudflare.com/admin
+MODELS:                 https://xxxx.trycloudflare.com/v1/models
+```
+
+Done. Use the `/v1` URL in any OpenAI client, and open `/admin` for the dashboard.
 
 ---
 
@@ -219,6 +240,38 @@ sleep 12 && grep -oE 'https://[a-z0-9-]+\.trycloudflare.com' tunnel.log | head -
    The caller never sees a limit.
 4. After `TWINMIND_REQ_PER_ACCOUNT` requests an account is **deleted upstream**
    and replaced — burn-after-use, no residue.
+
+---
+
+## 🖥️ Admin Dashboard (`/admin`)
+
+Open your public URL **+ `/admin`** (mobile friendly) — or locally `http://127.0.0.1:8080/admin`.
+
+Tabs:
+
+| Tab | What it does |
+|---|---|
+| **Overview** | Total requests, input tokens, output tokens, total tokens, failed, pool status, uptime, and a **per-model** breakdown (requests + in/out tokens). |
+| **Requests** | Live list of every request (time, model, in/out tokens, status, stream/sync). **Tap a row** to open full detail. |
+| **Request detail** | Shows exactly what went in and what came out — **Input (by user)** and **Output (by model)** with token counts, plus **Copy** buttons and a **Summarize this request** button. |
+| **Summarize** | Paste any text and summarize it with a model of your choice (e.g. `gpt-6-astra-thinking`, `claude-opus-5-5-thinking`). |
+| **Pool** | **Resize** the account pool (grow/shrink), add one, rotate (burn oldest), or **burn all**. |
+| **Terminal** | Run shell commands on the host right from the browser. |
+| **Health** | Raw `/health` output. |
+
+**Gateway switch (Overview tab):** press **Turn OFF** — the API immediately rejects all new
+requests with `503` until you press **Turn ON**. Use this to stop serving without killing the process.
+
+### Protect the dashboard (optional)
+
+Set an admin password before starting:
+
+```bash
+export TWINMIND_ADMIN_KEY='your-secret'
+nohup python3 app.py > server.log 2>&1 &
+```
+
+Then open `https://YOUR-URL/admin?key=your-secret` (it is stored in the browser for you).
 
 ---
 

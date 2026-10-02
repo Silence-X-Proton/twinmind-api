@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b1220">
+<title>TwinMind Gateway — Admin</title>
+<style>
+  :root{
+    --bg:#0b1220; --card:#131c2e; --card2:#0f172a; --line:#243049;
+    --fg:#e6edf7; --mut:#8b9bb4; --acc:#3b82f6; --acc2:#22c55e; --warn:#f59e0b; --err:#ef4444;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{background:var(--bg);color:var(--fg);font:15px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;-webkit-text-size-adjust:100%}
+  a{color:var(--acc)}
+  .wrap{max-width:1100px;margin:0 auto;padding:12px 12px 90px}
+  header{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 4px}
+  header h1{font-size:18px;margin:0;letter-spacing:.2px}
+  header h1 span{color:var(--acc)}
+  .gstate{font-size:12px;font-weight:700;padding:5px 10px;border-radius:999px;border:1px solid var(--line)}
+  .gstate.on{color:#0a1a0f;background:var(--acc2)}
+  .gstate.off{color:#1a0a0a;background:var(--err)}
+  .tabs{display:flex;gap:6px;overflow-x:auto;padding:6px 2px;position:sticky;top:0;background:var(--bg);z-index:20;border-bottom:1px solid var(--line)}
+  .tabs::-webkit-scrollbar{display:none}
+  .tab{flex:none;padding:8px 14px;border-radius:999px;border:1px solid var(--line);background:var(--card2);color:var(--mut);font-weight:600;font-size:14px;white-space:nowrap;cursor:pointer}
+  .tab.active{background:var(--acc);color:#fff;border-color:var(--acc)}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-top:12px}
+  .stat{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px}
+  .stat .k{color:var(--mut);font-size:12px;text-transform:uppercase;letter-spacing:.5px}
+  .stat .v{font-size:24px;font-weight:800;margin-top:6px;word-break:break-all}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;margin-top:12px}
+  .card h3{margin:0 0 10px;font-size:15px}
+  .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  input,textarea,button,select{font:inherit;color:var(--fg);background:var(--card2);border:1px solid var(--line);border-radius:10px;padding:10px}
+  input,select,textarea{width:100%}
+  textarea{min-height:90px;resize:vertical}
+  button{background:var(--acc);border-color:var(--acc);color:#fff;font-weight:700;cursor:pointer}
+  button.g{background:var(--acc2);border-color:var(--acc2);color:#03140a}
+  button.r{background:var(--err);border-color:var(--err)}
+  button.ghost{background:var(--card2);color:var(--fg);border-color:var(--line)}
+  button:disabled{opacity:.5;cursor:not-allowed}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th,td{text-align:left;padding:8px 6px;border-bottom:1px solid var(--line);white-space:nowrap}
+  th{color:var(--mut);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.4px}
+  tr.req{cursor:pointer}
+  tr.req:hover{background:#182238}
+  .pill{font-size:11px;padding:2px 8px;border-radius:999px;border:1px solid var(--line);color:var(--mut)}
+  .pill.ok{color:#0a1a0f;background:var(--acc2)} .pill.err{color:#1a0a0a;background:var(--err)}
+  .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12.5px}
+  pre{background:#070c16;border:1px solid var(--line);border-radius:10px;padding:10px;overflow:auto;max-height:340px;white-space:pre-wrap;word-break:break-word}
+  .muted{color:var(--mut);font-size:12.5px}
+  .kv{display:flex;justify-content:space-between;gap:10px;padding:6px 0;border-bottom:1px dashed var(--line)}
+  .toast{position:fixed;left:50%;bottom:16px;transform:translateX(-50%);background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px 14px;font-size:13px;z-index:60;box-shadow:0 8px 24px rgba(0,0,0,.4)}
+  .hide{display:none!important}
+  .tblwrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
+  .termout{background:#03070f;border:1px solid var(--line);border-radius:10px;padding:10px;min-height:120px;max-height:400px;overflow:auto;white-space:pre-wrap;word-break:break-word;font-family:ui-monospace,monospace;font-size:12.5px}
+  .termrow{display:flex;gap:8px}
+  .termrow input{flex:1}
+  .chips{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+  .chip{padding:6px 10px;border-radius:8px;background:var(--card2);border:1px solid var(--line);font-size:12.5px;cursor:pointer}
+  .chip:hover{border-color:var(--acc)}
+  @media(max-width:600px){ .stat .v{font-size:20px} header h1{font-size:16px} }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>TwinMind <span>Gateway</span> · Admin</h1>
+    <div id="gstate" class="gstate on">ON</div>
+  </header>
+
+  <div class="tabs">
+    <div class="tab active" data-t="overview">Overview</div>
+    <div class="tab" data-t="requests">Requests</div>
+    <div class="tab" data-t="summarize">Summarize</div>
+    <div class="tab" data-t="pool">Pool</div>
+    <div class="tab" data-t="terminal">Terminal</div>
+    <div class="tab" data-t="health">Health</div>
+  </div>
+
+  <!-- OVERVIEW -->
+  <section id="t-overview">
+    <div class="grid" id="statGrid"></div>
+    <div class="card">
+      <h3>Per-model usage</h3>
+      <div class="tblwrap"><table id="modelTbl"><thead><tr><th>Model</th><th>Req</th><th>In tok</th><th>Out tok</th><th>Fail</th></tr></thead><tbody></tbody></table></div>
+    </div>
+    <div class="card">
+      <h3>Gateway</h3>
+      <div class="row">
+        <button id="gwOn" class="g">Turn ON</button>
+        <button id="gwOff" class="r">Turn OFF</button>
+        <span class="muted" id="gwMsg"></span>
+      </div>
+      <p class="muted">OFF = the API rejects all new requests (503) until turned back ON.</p>
+    </div>
+  </section>
+
+  <!-- REQUESTS -->
+  <section id="t-requests" class="hide">
+    <div class="card">
+      <div class="row"><button class="ghost" id="refReq">⟳ Refresh</button><span class="muted" id="reqMsg"></span></div>
+      <div class="tblwrap"><table id="reqTbl">
+        <thead><tr><th>Time</th><th>Model</th><th>In</th><th>Out</th><th>St</th><th>Type</th></tr></thead><tbody></tbody>
+      </table></div>
+    </div>
+  </section>
+
+  <!-- REQUEST DETAIL -->
+  <section id="t-detail" class="hide">
+    <div class="card">
+      <div class="row"><button class="ghost" id="backReq">← Back</button><span class="muted" id="detId"></span></div>
+      <div id="detKv"></div>
+      <h3 style="margin-top:14px">Input (user)</h3>
+      <pre id="detIn"></pre>
+      <div class="row"><button class="ghost" id="cpIn">Copy input</button></div>
+      <h3 style="margin-top:14px">Output (model)</h3>
+      <pre id="detOut"></pre>
+      <div class="row"><button class="ghost" id="cpOut">Copy output</button></div>
+      <div id="detThinkWrap" class="hide">
+        <h3 style="margin-top:14px">Thinking</h3><pre id="detThink"></pre>
+      </div>
+      <div class="row" style="margin-top:14px">
+        <button id="sumThis">Summarize this request</button>
+        <select id="detModel" style="max-width:220px"></select>
+      </div>
+      <pre id="detSum" class="hide"></pre>
+    </div>
+  </section>
+
+  <!-- SUMMARIZE -->
+  <section id="t-summarize" class="hide">
+    <div class="card">
+      <h3>Summarize text</h3>
+      <div class="row" style="margin-bottom:8px">
+        <select id="sumModel" style="max-width:260px"></select>
+        <span class="muted">pick a strong model (e.g. gpt-6-astra-thinking, claude-opus-5-5-thinking)</span>
+      </div>
+      <textarea id="sumText" placeholder="Paste any text to summarize…"></textarea>
+      <div class="row" style="margin-top:8px"><button id="sumBtn">Summarize</button><span class="muted" id="sumMsg"></span></div>
+      <pre id="sumOut" class="hide"></pre>
+    </div>
+  </section>
+
+  <!-- POOL -->
+  <section id="t-pool" class="hide">
+    <div class="card">
+      <h3>Account pool <span class="pill" id="poolPill"></span></h3>
+      <div class="row">
+        <input id="poolSize" type="number" min="1" max="200" style="max-width:120px" placeholder="size">
+        <button id="poolResize">Resize</button>
+        <button class="ghost" id="poolAdd">+ Add 1</button>
+        <button class="ghost" id="poolRotate">Rotate</button>
+        <button class="r" id="poolBurn">Burn all</button>
+      </div>
+      <p class="muted">Burn = delete accounts upstream (no trace) and refill. Shrink also burns removed accounts.</p>
+      <div class="tblwrap"><table id="poolTbl"><thead><tr><th>Email</th><th>Req</th><th>Fail</th><th>Avail</th></tr></thead><tbody></tbody></table></div>
+    </div>
+  </section>
+
+  <!-- TERMINAL -->
+  <section id="t-terminal" class="hide">
+    <div class="card">
+      <h3>Terminal</h3>
+      <div class="termrow"><input id="termCmd" class="mono" placeholder="e.g. ls -la  |  tail -20 server.log"><button id="termRun">Run</button></div>
+      <div class="chips">
+        <div class="chip" data-c="ls -la">ls -la</div>
+        <div class="chip" data-c="tail -20 server.log">tail server.log</div>
+        <div class="chip" data-c="ps aux | grep -E 'app.py|cloudflared' | grep -v grep">procs</div>
+        <div class="chip" data-c="pwd">pwd</div>
+        <div class="chip" data-c="cat pool_state.json | head -c 800">pool_state</div>
+      </div>
+      <div class="termout mono" id="termOut" style="margin-top:10px"></div>
+    </div>
+  </section>
+
+  <!-- HEALTH -->
+  <section id="t-health" class="hide">
+    <div class="card">
+      <h3>Health</h3>
+      <pre id="healthOut" class="mono">loading…</pre>
+      <div class="row"><button class="ghost" id="refHealth">⟳ Refresh</button></div>
+    </div>
+  </section>
+</div>
+
+<script>
+const Q = new URLSearchParams(location.search);
+const ADMIN_KEY = Q.get('key') || localStorage.getItem('tm_admin_key') || '';
+if (Q.get('key')) localStorage.setItem('tm_admin_key', Q.get('key'));
+const H = () => ADMIN_KEY ? { 'Content-Type':'application/json', 'X-Admin-Key': ADMIN_KEY } : { 'Content-Type':'application/json' };
+const q = (s) => document.querySelector(s);
+const qa = (s) => Array.from(document.querySelectorAll(s));
+
+function toast(msg){ const t=document.createElement('div'); t.className='toast'; t.textContent=msg; document.body.appendChild(t); setTimeout(()=>t.remove(),2200); }
+async function api(path, opts={}){
+  const k = ADMIN_KEY ? (path.includes('?')?'&':'?')+'key='+encodeURIComponent(ADMIN_KEY) : '';
+  const r = await fetch('/admin/api'+path+k, { headers:H(), ...opts });
+  if(!r.ok){ let e; try{e=await r.json()}catch{ e={detail:r.statusText} } throw new Error(e.detail||('HTTP '+r.status)); }
+  return r.json();
+}
+const fmt = (n)=> (n||0).toLocaleString();
+const tstr = (ts)=> new Date(ts*1000).toLocaleString();
+const esc = (s)=> (s||'').replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+
+// tabs
+qa('.tab').forEach(t=>t.onclick=()=>{
+  qa('.tab').forEach(x=>x.classList.remove('active')); t.classList.add('active');
+  ['overview','requests','detail','summarize','pool','terminal','health'].forEach(x=>q('#t-'+x).classList.add('hide'));
+  q('#t-'+t.dataset.t).classList.remove('hide');
+  if(t.dataset.t==='requests') loadRequests();
+  if(t.dataset.t==='pool') loadPool();
+  if(t.dataset.t==='health') loadHealth();
+  if(t.dataset.t==='overview') loadStats();
+});
+
+function setGateway(on){ q('#gstate').textContent = on?'ON':'OFF'; q('#gstate').className = 'gstate '+(on?'on':'off'); }
+let MODELS = [];
+function fillModelSelects(models){
+  const opts = ['auto', ...models.map(m=>m.id)];
+  ['#sumModel','#detModel'].forEach(sel=>{ const el=q(sel); if(!el) return; el.innerHTML = opts.map(m=>`<option value="${m}">${m}</option>`).join(''); });
+  q('#sumModel').value = 'gpt-6-astra-thinking';
+  q('#detModel').value = 'claude-opus-5-5-thinking';
+}
+
+async function loadModels(){
+  try{ const r = await fetch('/v1/models',{headers:H()}); const d = await r.json(); MODELS = d.data||[]; fillModelSelects(MODELS); }catch(e){}
+}
+
+async function loadStats(){
+  try{
+    const d = await api('/stats');
+    setGateway(d.gateway);
+    q('#gstate').title = 'req/account quota: '+d.req_per_account;
+    const g = [
+      ['Total requests', fmt(d.total_requests)],
+      ['Input tokens', fmt(d.total_in_tokens)],
+      ['Output tokens', fmt(d.total_out_tokens)],
+      ['Total tokens', fmt((d.total_in_tokens||0)+(d.total_out_tokens||0))],
+      ['Failed', fmt(d.failed_requests)],
+      ['Pool', (d.pool.size||0)+' / '+(d.pool.available||0)+' avail'],
+      ['Uptime', Math.round((d.uptime||0))+'s'],
+    ];
+    q('#statGrid').innerHTML = g.map(([k,v])=>`<div class="stat"><div class="k">${k}</div><div class="v">${v}</div></div>`).join('');
+    const ms = Object.entries(d.models||{});
+    q('#modelTbl tbody').innerHTML = ms.length? ms.map(([m,v])=>`<tr><td>${esc(m)}</td><td>${fmt(v.requests)}</td><td>${fmt(v.in_tokens)}</td><td>${fmt(v.out_tokens)}</td><td>${fmt(v.failed)}</td></tr>`).join('') : '<tr><td colspan=5 class=muted>No requests yet</td></tr>';
+  }catch(e){ toast('Stats error: '+e.message); }
+}
+
+async function loadRequests(){
+  try{
+    const d = await api('/requests?limit=150');
+    q('#reqMsg').textContent = d.count+' shown';
+    q('#reqTbl tbody').innerHTML = d.requests.map(r=>`<tr class="req" data-id="${r.id}"><td>${tstr(r.ts)}</td><td>${esc(r.model)}</td><td>${fmt(r.in_tokens)}</td><td>${fmt(r.out_tokens)}</td><td><span class="pill ${r.status==='ok'?'ok':'err'}">${r.status}</span></td><td>${r.stream?'stream':'sync'}</td></tr>`).join('') || '<tr><td colspan=6 class=muted>No requests yet</td></tr>';
+    qa('#reqTbl tr.req').forEach(tr=> tr.onclick=()=> showDetail(tr.dataset.id));
+  }catch(e){ toast('Requests error: '+e.message); }
+}
+
+async function showDetail(id){
+  try{
+    const d = await api('/requests/'+encodeURIComponent(id));
+    qa('.tab').forEach(x=>x.classList.remove('active'));
+    ['overview','requests','detail','summarize','pool','terminal','health'].forEach(x=>q('#t-'+x).classList.add('hide'));
+    q('#t-detail').classList.remove('hide');
+    q('#detId').textContent = d.id+' · '+tstr(d.ts);
+    q('#detKv').innerHTML = [
+      ['Model',d.model],['Endpoint',d.endpoint],['Type',d.stream?'stream':'sync'],
+      ['Status',d.status],['Duration',d.duration+'s'],['Session',d.session||'-'],
+      ['Input tokens (by user)',fmt(d.in_tokens)],['Output tokens (by model)',fmt(d.out_tokens)],
+    ].map(([k,v])=>`<div class="kv"><span class="muted">${k}</span><span class="mono">${esc(String(v))}</span></div>`).join('');
+    q('#detIn').textContent = d.prompt||'';
+    q('#detOut').textContent = d.output||'';
+    if(d.thinking){ q('#detThinkWrap').classList.remove('hide'); q('#detThink').textContent=d.thinking; } else q('#detThinkWrap').classList.add('hide');
+    q('#detSum').classList.add('hide'); q('#detSum').textContent='';
+    q('#sumThis').onclick = async ()=>{
+      q('#sumThis').disabled=true; q('#sumThis').textContent='Summarizing…';
+      try{ const r = await api('/summarize',{method:'POST',body:JSON.stringify({request_id:id, model:q('#detModel').value})});
+        q('#detSum').classList.remove('hide'); q('#detSum').textContent = r.summary; toast('Summarized with '+r.model); }
+      catch(e){ toast('Summarize: '+e.message); }
+      finally{ q('#sumThis').disabled=false; q('#sumThis').textContent='Summarize this request'; }
+    };
+    q('#detail').dataset.id = id;
+  }catch(e){ toast('Detail error: '+e.message); }
+}
+q('#backReq').onclick = ()=>{ qa('.tab').forEach(x=>x.classList.remove('active')); q('.tab[data-t=requests]').classList.add('active'); ['overview','requests','detail','summarize','pool','terminal','health'].forEach(x=>q('#t-'+x).classList.add('hide')); q('#t-requests').classList.remove('hide'); loadRequests(); };
+q('#cpIn').onclick = ()=> { navigator.clipboard.writeText(q('#detIn').textContent||''); toast('Input copied'); };
+q('#cpOut').onclick = ()=> { navigator.clipboard.writeText(q('#detOut').textContent||''); toast('Output copied'); };
+
+// summarize tab
+q('#sumBtn').onclick = async ()=>{
+  const text = q('#sumText').value.trim(); if(!text) return toast('Enter text');
+  q('#sumBtn').disabled=true; q('#sumMsg').textContent='Working…';
+  try{ const r = await api('/summarize',{method:'POST',body:JSON.stringify({text, model:q('#sumModel').value})});
+    q('#sumOut').classList.remove('hide'); q('#sumOut').textContent = r.summary; q('#sumMsg').textContent='via '+r.model; }
+  catch(e){ toast('Summarize: '+e.message); q('#sumMsg').textContent=''; }
+  finally{ q('#sumBtn').disabled=false; }
+};
+
+// pool
+async function loadPool(){
+  try{
+    const d = await api('/stats');
+    q('#poolPill').textContent = d.pool.size+' accounts';
+    q('#poolSize').placeholder = d.pool.size;
+    q('#poolTbl tbody').innerHTML = (d.accounts||[]).map(a=>`<tr><td class="mono">${esc(a.email)}</td><td>${fmt(a.total_requests)}</td><td>${fmt(a.failures)}</td><td>${a.available?'✓':'✗'}</td></tr>`).join('') || '<tr><td colspan=4 class=muted>No accounts</td></tr>';
+  }catch(e){ toast('Pool error: '+e.message); }
+}
+q('#poolResize').onclick = async ()=>{ const size=parseInt(q('#poolSize').value); if(!size) return toast('Enter size'); try{ const r=await api('/pool/resize',{method:'POST',body:JSON.stringify({size})}); toast('Pool now '+r.size); loadPool(); loadStats(); }catch(e){ toast('Resize: '+e.message);} };
+q('#poolAdd').onclick = async ()=>{ try{ await api('/pool/add',{method:'POST'}); toast('Account added'); loadPool(); }catch(e){ toast(e.message);} };
+q('#poolRotate').onclick = async ()=>{ try{ await api('/pool/rotate',{method:'POST'}); toast('Rotated (burned oldest)'); loadPool(); }catch(e){ toast(e.message);} };
+q('#poolBurn').onclick = async ()=>{ if(!confirm('Burn ALL accounts and refill?')) return; try{ const r=await api('/pool/burn-all',{method:'POST'}); toast('Burned '+r.burned); loadPool();}catch(e){ toast(e.message);} };
+
+// gateway
+q('#gwOn').onclick = async ()=>{ try{ const r=await api('/gateway',{method:'POST',body:JSON.stringify({enabled:true})}); setGateway(r.gateway); q('#gwMsg').textContent='Gateway ON'; }catch(e){ toast(e.message);} };
+q('#gwOff').onclick = async ()=>{ try{ const r=await api('/gateway',{method:'POST',body:JSON.stringify({enabled:false})}); setGateway(r.gateway); q('#gwMsg').textContent='Gateway OFF — requests rejected'; }catch(e){ toast(e.message);} };
+
+// terminal
+qa('.chip').forEach(c=> c.onclick=()=>{ q('#termCmd').value=c.dataset.c; q('#termCmd').focus(); });
+q('#termRun').onclick = runTerm;
+q('#termCmd').addEventListener('keydown',e=>{ if(e.key==='Enter') runTerm(); });
+async function runTerm(){
+  const cmd=q('#termCmd').value.trim(); if(!cmd) return;
+  q('#termOut').textContent += '\n$ '+cmd+'\n';
+  q('#termRun').disabled=true;
+  try{ const r = await api('/terminal',{method:'POST',body:JSON.stringify({cmd})});
+    q('#termOut').textContent += (r.output||'')+'\n'; }
+  catch(e){ q('#termOut').textContent += 'error: '+e.message+'\n'; }
+  finally{ q('#termRun').disabled=false; q('#termOut').scrollTop=q('#termOut').scrollHeight; }
+}
+
+// health
+async function loadHealth(){
+  try{ const r = await fetch('/health'); q('#healthOut').textContent = JSON.stringify(await r.json(),null,2); }catch(e){ q('#healthOut').textContent='error: '+e.message; }
+}
+q('#refHealth').onclick = loadHealth;
+q('#refReq').onclick = loadRequests;
+
+// init
+loadModels(); loadStats();
+setInterval(()=>{ if(!q('#t-overview').classList.contains('hide')) loadStats(); }, 8000);
+</script>
+</body>
+</html>
