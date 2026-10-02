@@ -182,6 +182,11 @@
       <pre id="healthOut" class="mono">loading…</pre>
       <div class="row"><button class="ghost" id="refHealth">⟳ Refresh</button></div>
     </div>
+    <div class="card" style="border-color:#5b1e1e">
+      <h3 style="color:#ef4444">⚠ Danger zone</h3>
+      <p class="muted">Destroy = gateway OFF, burn ALL accounts (deleted upstream), kill the tunnel and the server. This stops everything. You must confirm 4 times.</p>
+      <button class="r" id="destroyBtn">Destroy gateway</button>
+    </div>
   </section>
 </div>
 
@@ -335,6 +340,24 @@ async function loadHealth(){
 }
 q('#refHealth').onclick = loadHealth;
 q('#refReq').onclick = loadRequests;
+
+// destroy (4 confirmations)
+q('#destroyBtn').onclick = async ()=>{
+  const steps = [
+    'Are you sure you want to DESTROY the gateway? (1/4)',
+    'This will burn ALL accounts and stop everything. Continue? (2/4)',
+    'Really stop the server and tunnel? (3/4)',
+    'FINAL confirmation — type OK to destroy. (4/4)'
+  ];
+  for(let i=0;i<3;i++){ if(!confirm(steps[i])) return toast('Cancelled'); }
+  const typed = prompt(steps[3]);
+  if((typed||'').trim().toUpperCase() !== 'OK') return toast('Cancelled');
+  try{
+    const r = await api('/destroy',{method:'POST',body:JSON.stringify({confirm:'DESTROY'})});
+    toast(r.message||'Destroyed');
+    document.body.innerHTML = '<div style="padding:40px;text-align:center;font-family:sans-serif;color:#e6edf7"><h2>Gateway destroyed.</h2><p>Accounts burned, tunnel + server stopped.</p></div>';
+  }catch(e){ toast('Destroy: '+e.message); }
+};
 
 // init
 loadModels(); loadStats();

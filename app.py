@@ -339,6 +339,12 @@ async def _run_chat(query: str, model: str, session_id: Optional[str]) -> tuple[
 # --------------------------------------------------------------------------- #
 # Public routes                                                                #
 # --------------------------------------------------------------------------- #
+@app.get("/")
+async def root():
+    from fastapi.responses import RedirectResponse
+    return RedirectResponse(url="/admin")
+
+
 @app.get("/health")
 async def health():
     s = pool.stats()
@@ -826,6 +832,36 @@ async def admin_terminal(payload: dict, key: Optional[str] = None):
         return {"cmd": cmd, "cwd": cwd, "exit": proc.returncode, "output": (out or b"").decode("utf-8", "replace")}
     except Exception as e:
         return {"cmd": cmd, "cwd": cwd, "exit": None, "output": f"error: {e}"}
+
+
+@app.post("/admin/api/destroy")
+async def admin_destroy(payload: dict, key: Optional[str] = None):
+    """Full shutdown: turn gateway off, burn all accounts, kill server + tunnel.
+    Requires {"confirm": "DESTROY"} in the body (UI asks 4 times)."""
+    _check_admin(key)
+    if (payload.get("confirm") or "").strip().upper() != "DESTROY":
+        raise HTTPException(status_code=400, detail="Confirmation token required")
+    STATE.gateway_enabled = False
+
+    async def _shutdown():
+        await asyncio.sleep(1.5)
+        # burn all accounts (best effort)
+        for a in list(pool._accounts):
+            try:
+                await asyncio.to_thread(a.burn)
+            except Exception:
+                pass
+        # kill tunnel + self
+        for pattern in ("cloudflared tunnel", "cloudflared"):
+            try:
+                p = await asyncio.create_subprocess_shell(f"pkill -f '{pattern}'")
+                await p.wait()
+            except Exception:
+                pass
+        os._exit(0)
+
+    asyncio.get_running_loop().create_task(_shutdown())
+    return {"destroyed": True, "message": "Shutting down: burning accounts, killing tunnel + server."}
 
 
 if __name__ == "__main__":

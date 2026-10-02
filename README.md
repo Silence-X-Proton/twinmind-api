@@ -275,6 +275,19 @@ Then open `https://YOUR-URL/admin?key=your-secret` (it is stored in the browser 
 
 ---
 
+
+---
+
+## 🔁 Continuous running + Destroy
+
+The Colab launcher runs a **watchdog**: if the API or the tunnel ever dies, it
+automatically restarts them. So it keeps running continuously — no manual restart.
+
+It stops **only** when:
+- you press **Destroy gateway** in the admin **Health** tab (asks you **4 times**;
+  burns all accounts, kills the tunnel + server), or
+- the host / Colab session ends (Colab idle limit).
+
 ## ❗ Notes
 
 - The quick-tunnel URL **changes every restart**. For a stable URL, create a
