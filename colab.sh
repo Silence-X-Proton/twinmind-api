@@ -64,8 +64,12 @@ pkill -f 'cloudflared tunnel' 2>/dev/null || true
 sleep 2
 
 # 5) start the watchdog (keeps api + tunnel alive continuously)
+# IMPORTANT: Colab kills the whole process group when the cell finishes.
+# `nohup` only ignores SIGHUP -> children still die. `setsid` puts everything
+# into a NEW session that escapes the process-group kill, so the stack keeps
+# running after the cell ends. Redirect stdin from /dev/null + disown too.
 say "Starting watchdog (auto-restarts server + tunnel, protocol=$PROTO)"
-nohup env TWINMIND_DIR="$DIR" TWINMIND_PORT="$PORT" TWINMIND_POOL_SIZE="${TWINMIND_POOL_SIZE:-15}" TWINMIND_TUNNEL_PROTOCOL="$PROTO" bash -c '
+setsid env TWINMIND_DIR="$DIR" TWINMIND_PORT="$PORT" TWINMIND_POOL_SIZE="${TWINMIND_POOL_SIZE:-15}" TWINMIND_TUNNEL_PROTOCOL="$PROTO" bash -c '
 DIR="$TWINMIND_DIR"; PORT="$TWINMIND_PORT"; PROTO="$TWINMIND_TUNNEL_PROTOCOL"
 cd "$DIR"
 alive(){ [ -n "${1:-}" ] && kill -0 "$1" 2>/dev/null; }
@@ -74,20 +78,29 @@ while true; do
   SRV_PID="$(cat .server.pid 2>/dev/null || true)"
   if ! alive "$SRV_PID"; then
     echo "[watchdog] starting api on :$PORT"
-    TWINMIND_POOL_SIZE="$TWINMIND_POOL_SIZE" nohup python3 app.py > server.log 2>&1 &
+    # setsid -> new session, survives Colab cell teardown
+    setsid env TWINMIND_POOL_SIZE="$TWINMIND_POOL_SIZE" python3 app.py </dev/null > server.log 2>&1 &
     echo $! > .server.pid
   fi
   # ---- tunnel (http2 = TCP, required on Colab where UDP/QUIC is blocked) ----
   TUN_PID="$(cat .tunnel.pid 2>/dev/null || true)"
   if ! alive "$TUN_PID"; then
     echo "[watchdog] starting tunnel (protocol=$PROTO)"
-    nohup cloudflared tunnel --url "http://localhost:$PORT" --protocol "$PROTO" --no-autoupdate > tunnel.log 2>&1 &
+    # setsid -> new session, survives Colab cell teardown
+    setsid cloudflared tunnel --url "http://localhost:$PORT" --protocol "$PROTO" --no-autoupdate </dev/null > tunnel.log 2>&1 &
     echo $! > .tunnel.pid
+  fi
+  # persist the current public URL for later retrieval from any cell
+  if [ -s tunnel.log ]; then
+    sed -r "s/\x1B\[[0-9;]*[mK]//g" tunnel.log 2>/dev/null \
+      | grep -oE "https://[a-z0-9-]+\.trycloudflare\.com" | head -1 > public_url.txt 2>/dev/null || true
   fi
   sleep 8
 done
-' > watchdog.log 2>&1 &
-echo $! > "$PIDFILE"
+' </dev/null > watchdog.log 2>&1 &
+WPID=$!
+echo $WPID > "$PIDFILE"
+disown 2>/dev/null || true
 
 echo "--- waiting for services to come up ---"
 # wait for local health (retry up to ~40s)

@@ -7,3 +7,4 @@ pool_state.json
 .server.pid
 .tunnel.pid
 watchdog.log
+public_url.txt
