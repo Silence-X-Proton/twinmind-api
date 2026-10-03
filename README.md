@@ -252,6 +252,45 @@ sleep 12 && grep -oE 'https://[a-z0-9-]+\.trycloudflare.com' tunnel.log | head -
 
 ---
 
+## 🏠 Persistent hosting (NO more dead URLs on Colab)
+
+Google Colab is **ephemeral**: it recycles the VM on idle timeout / quota, which kills the tunnel and makes your saved URL show Cloudflare **1033/404**. If that keeps happening, run TwinMind on a **persistent host** — the process stays up 24/7 and the URL stays alive.
+
+### Option A — Render (free tier, one-click)
+
+1. Push this repo to GitHub (already done).
+2. Render → **New → Blueprint** → pick this repo (uses `render.yaml` + `Dockerfile`).
+3. Render builds the container and gives you a **permanent** `https://<name>.onrender.com` URL.
+   - No Cloudflare tunnel needed (`NO_TUNNEL=1`); Render provides HTTPS.
+   - `https://<name>.onrender.com/admin` is your dashboard.
+
+### Option B — Fly.io
+
+```bash
+fly launch --no-deploy          # detects fly.toml
+fly deploy
+# optional stable named-tunnel URL instead of Fly's URL:
+# fly secrets set TWINMIND_TUNNEL_TOKEN=<from Cloudflare Zero Trust>
+```
+
+### Option C — any VPS / Docker
+
+```bash
+docker build -t twinmind .
+docker run -d --name twinmind -p 8080:8080 \
+  -e TWINMIND_TUNNEL_TOKEN='<optional named tunnel token>' \
+  twinmind
+# without a token the container starts its own quick tunnel and prints the URL
+```
+
+### Optional: protect the endpoints
+
+Set these env vars on any host:
+- `TWINMIND_API_KEYS=sk-key1,sk-key2` — require an API key for `/v1/*`
+- `TWINMIND_ADMIN_KEY=change-me` — lock the `/admin` UI
+
+---
+
 ## 🔒 How it works (short)
 
 1. On start, the pool creates `TWINMIND_POOL_SIZE` accounts via Firebase

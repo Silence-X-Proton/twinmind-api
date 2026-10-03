@@ -1,0 +1,32 @@
+# Render.com blueprint — ONE-CLICK persistent hosting (free tier available).
+# Why: Google Colab recycles its VM (idle/quota) and kills the tunnel, so the
+# saved URL shows Cloudflare 1033/404. Render keeps the service running 24/7.
+#
+# Usage: push repo to GitHub -> Render -> New -> Blueprint -> pick this repo.
+# Render gives you a permanent https URL (no cloudflared needed).
+services:
+  - type: web
+    name: twinmind-gateway
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      # Render provides its own public HTTPS URL -> no external tunnel needed.
+      - key: NO_TUNNEL
+        value: "1"
+      - key: TWINMIND_HOST
+        value: 0.0.0.0
+      # Render injects PORT; entrypoint maps it to TWINMIND_PORT automatically.
+      - key: TWINMIND_POOL_SIZE
+        value: "15"
+      # Optional: require an API key for clients (comma separated).
+      # - key: TWINMIND_API_KEYS
+      #   value: sk-your-key-1
+      # Optional: lock the admin UI with a key.
+      # - key: TWINMIND_ADMIN_KEY
+      #   value: change-me
+      # Optional: use a NAMED cloudflare tunnel instead of Render's URL.
+      # - key: TWINMIND_TUNNEL_TOKEN
+      #   sync: false

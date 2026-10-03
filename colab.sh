@@ -211,6 +211,24 @@ for i in $(seq 1 15); do
 done
 [ -n "$URL" ] && printf '%s\n' "$URL" > public_url.txt
 
+# Verify the URL is actually routable through Cloudflare's edge before we call
+# it a success. A freshly registered quick tunnel can take a few seconds to
+# become reachable, and a dead link shows Cloudflare 1033/404.
+if [ -n "$URL" ]; then
+  say "Verifying public URL through Cloudflare edge…"
+  EDGE=""
+  for i in $(seq 1 12); do
+    EDGE="$(curl -s4 -m 10 -o /dev/null -w '%{http_code}' "$URL/health" 2>/dev/null || true)"
+    [ "$EDGE" = "200" ] && break
+    sleep 5
+  done
+  if [ "$EDGE" = "200" ]; then
+    ok "public edge check: HTTP 200 (URL is live)"
+  else
+    warn "public edge check: HTTP ${EDGE:-?} — URL not reachable yet (tunnel may still be starting, or a stale link)"
+  fi
+fi
+
 print_urls "$URL"
 echo "The watchdog keeps everything alive automatically."
 echo "Re-running this command will REUSE the running instance (URL unchanged)."

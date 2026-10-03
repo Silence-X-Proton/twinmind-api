@@ -1,0 +1,39 @@
+# Fly.io config — persistent hosting (alternative to Render).
+# Fly runs the container 24/7 and gives a permanent https URL, so the tunnel
+# never dies on an idle timeout (unlike Google Colab's ephemeral VM).
+#
+# Usage:
+#   fly launch --no-deploy      # detect this file
+#   fly secrets set TWINMIND_TUNNEL_TOKEN=<token>   # optional stable URL
+#   fly deploy
+#
+# Fly already provides a public HTTPS URL, so we disable the cloudflared tunnel
+# by default (NO_TUNNEL=1). Remove that env to add a quick/named tunnel instead.
+app = "twinmind-gateway"
+primary_region = "sin"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  NO_TUNNEL = "1"
+  TWINMIND_HOST = "0.0.0.0"
+  TWINMIND_POOL_SIZE = "15"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = false
+  auto_start_machines = true
+  min_machines_running = 1
+
+[[http_service.checks]]
+  interval = "30s"
+  timeout = "5s"
+  grace_period = "20s"
+  method = "GET"
+  path = "/health"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"
