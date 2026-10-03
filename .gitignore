@@ -3,3 +3,7 @@ __pycache__/
 *.pyc
 *.log
 pool_state.json
+.watchdog
+.server.pid
+.tunnel.pid
+watchdog.log
