@@ -8,8 +8,12 @@
 #
 # Prints your public base URL (add /v1 for OpenAI clients, /admin for the UI).
 #
-# IMPORTANT: Colab blocks Cloudflare QUIC (UDP:7844) -> tunnel never connects.
-#            We force --protocol http2 (TCP:443) so the tunnel always comes up.
+# IMPORTANT:
+#   * Colab blocks Cloudflare QUIC (UDP:7844) -> tunnel never connects.
+#     We force --protocol http2 (TCP:443) so the tunnel always comes up.
+#   * The watchdog tracks the server/tunnel by PID files (NOT pgrep): the
+#     watchdog's own cmdline contains the words "python3 app.py"/"cloudflared",
+#     so pgrep -f would match itself and never start anything.
 set -uo pipefail
 
 REPO="${TWINMIND_REPO:-https://github.com/Silence-X-Proton/twinmind-api.git}"
@@ -44,10 +48,19 @@ if ! command -v cloudflared >/dev/null 2>&1; then
 fi
 cloudflared --version 2>/dev/null | head -1 || true
 
-# 4) stop old instances + watchdog
-if [ -f "$PIDFILE" ]; then kill "$(cat "$PIDFILE")" 2>/dev/null || true; rm -f "$PIDFILE"; fi
+# 4) stop old watchdog + services (PID-file first, then best-effort pkill)
+if [ -f "$PIDFILE" ]; then
+  kill "$(cat "$PIDFILE")" 2>/dev/null || true
+  rm -f "$PIDFILE"
+fi
+# kill by pidfiles the watchdog wrote
+for pf in "$DIR/.server.pid" "$DIR/.tunnel.pid"; do
+  [ -f "$pf" ] && kill "$(cat "$pf")" 2>/dev/null || true
+  rm -f "$pf"
+ done
+# best-effort cleanup of orphans (pkill here runs from THIS script, not the watchdog)
 pkill -f 'python3 app.py' 2>/dev/null || true
-pkill -f 'cloudflared' 2>/dev/null || true
+pkill -f 'cloudflared tunnel' 2>/dev/null || true
 sleep 2
 
 # 5) start the watchdog (keeps api + tunnel alive continuously)
@@ -55,16 +68,21 @@ say "Starting watchdog (auto-restarts server + tunnel, protocol=$PROTO)"
 nohup env TWINMIND_DIR="$DIR" TWINMIND_PORT="$PORT" TWINMIND_POOL_SIZE="${TWINMIND_POOL_SIZE:-15}" TWINMIND_TUNNEL_PROTOCOL="$PROTO" bash -c '
 DIR="$TWINMIND_DIR"; PORT="$TWINMIND_PORT"; PROTO="$TWINMIND_TUNNEL_PROTOCOL"
 cd "$DIR"
+alive(){ [ -n "${1:-}" ] && kill -0 "$1" 2>/dev/null; }
 while true; do
-  # server
-  if ! pgrep -f "python3 app.py" >/dev/null 2>&1; then
+  # ---- server ----
+  SRV_PID="$(cat .server.pid 2>/dev/null || true)"
+  if ! alive "$SRV_PID"; then
     echo "[watchdog] starting api on :$PORT"
     TWINMIND_POOL_SIZE="$TWINMIND_POOL_SIZE" nohup python3 app.py > server.log 2>&1 &
+    echo $! > .server.pid
   fi
-  # tunnel (http2 = TCP, required on Colab where UDP/QUIC is blocked)
-  if ! pgrep -f "cloudflared" >/dev/null 2>&1; then
+  # ---- tunnel (http2 = TCP, required on Colab where UDP/QUIC is blocked) ----
+  TUN_PID="$(cat .tunnel.pid 2>/dev/null || true)"
+  if ! alive "$TUN_PID"; then
     echo "[watchdog] starting tunnel (protocol=$PROTO)"
     nohup cloudflared tunnel --url "http://localhost:$PORT" --protocol "$PROTO" --no-autoupdate > tunnel.log 2>&1 &
+    echo $! > .tunnel.pid
   fi
   sleep 8
 done
@@ -72,9 +90,14 @@ done
 echo $! > "$PIDFILE"
 
 echo "--- waiting for services to come up ---"
-sleep 20
-
-echo "health (local): $(curl -s -m 10 http://127.0.0.1:$PORT/health || echo down)"
+# wait for local health (retry up to ~40s)
+HEALTH="down"
+for i in $(seq 1 20); do
+  HEALTH="$(curl -s -m 5 http://127.0.0.1:$PORT/health || true)"
+  [ -n "$HEALTH" ] && break
+  sleep 2
+done
+echo "health (local): ${HEALTH:-down}"
 
 # strip ANSI + grep URL (cloudflared writes progress to stderr AND stdout)
 find_url() {
@@ -97,6 +120,7 @@ if [ -n "$URL" ]; then
 else
   echo "[!] Tunnel URL not found yet. Check logs:"
   echo "    tail -n 50 $DIR/tunnel.log"
+  echo "    tail -n 50 $DIR/watchdog.log"
   echo "    grep -oE 'https://[a-z0-9-]+\.trycloudflare\.com' $DIR/tunnel.log | head -1"
 fi
 echo "============================================================"
