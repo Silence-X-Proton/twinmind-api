@@ -62,14 +62,24 @@ print_urls(){
   echo "============================================================"
 }
 
-# Is an instance already up + healthy AND not asked to restart?
+# Is an instance already up + FULLY healthy AND not asked to restart?
+# Healthy means: watchdog alive AND server answering AND the tunnel process alive.
+# We must check the tunnel too: a quick tunnel that died (and got auto-restarted)
+# gets a NEW URL, so the old /admin link turns into Cloudflare 1033/404. If the
+# tunnel is dead we MUST NOT "reuse" -> the restart path repairs it.
 reuse_if_healthy(){
   [ "$RESTART" = "1" ] && return 1
   [ -f "$PIDFILE" ] || return 1
   local wp; wp="$(cat "$PIDFILE" 2>/dev/null || true)"
   [ -n "$wp" ] && kill -0 "$wp" 2>/dev/null || return 1
+  # server liveness
   local h; h="$(curl -s -m 4 "http://127.0.0.1:$PORT/health" || true)"
   [ -n "$h" ] || return 1
+  # tunnel liveness (PID-file tracked by the watchdog)
+  local tp; tp="$(cat "$DIR/.tunnel.pid" 2>/dev/null || true)"
+  { [ -n "$tp" ] && kill -0 "$tp" 2>/dev/null; } || return 1
+  # and we must actually know the current public URL
+  [ -n "$(current_url)" ] || return 1
   return 0
 }
 

@@ -854,6 +854,44 @@ async def admin_health(key: Optional[str] = None):
     }
 
 
+@app.get("/admin/api/tunnel")
+async def admin_tunnel(key: Optional[str] = None):
+    """Live tunnel info: current public URL + whether cloudflared is running.
+    Lets the dashboard show the *current* link, since a quick tunnel gets a new
+    URL every time it restarts (old links then show Cloudflare 1033/404)."""
+    _check_admin(key)
+    url = ""
+    p = os.path.join(HERE, "public_url.txt")
+    if os.path.exists(p):
+        try:
+            with open(p, "r", encoding="utf-8", errors="replace") as f:
+                url = (f.readline() or "").strip()
+        except OSError:
+            url = ""
+    running = False
+    pid = None
+    if os.path.exists(os.path.join(HERE, ".tunnel.pid")):
+        try:
+            with open(os.path.join(HERE, ".tunnel.pid"), "r", encoding="utf-8", errors="replace") as f:
+                pid = int((f.readline() or "0").strip() or 0) or None
+        except (OSError, ValueError):
+            pid = None
+    if pid:
+        try:
+            os.kill(pid, 0)
+            running = True
+        except OSError:
+            running = False
+    return {
+        "url": url,
+        "base": f"{url}/v1" if url else "",
+        "admin": f"{url}/admin" if url else "",
+        "tunnel_running": running,
+        "tunnel_pid": pid,
+        "mode": "named" if os.environ.get("TWINMIND_TUNNEL_TOKEN") else "quick",
+    }
+
+
 # --------------------------------------------------------------------------- #
 # Real interactive terminal (PTY over WebSocket)                              #
 # --------------------------------------------------------------------------- #

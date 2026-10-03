@@ -222,6 +222,26 @@ tail -f ~/twinmind-api/server.log
 tail -f ~/twinmind-api/tunnel.log
 ```
 
+### Cloudflare Error 1033 / 404 on your URL ("No web page was found")
+
+**Cause:** a quick tunnel gets a **new random URL every time cloudflared restarts** (crash, network blip, Colab idle, or a manual re-run). Any previously saved link then points at a hostname with no tunnel behind it -> Cloudflare edge returns **1033 / 404**.
+
+**Fix:**
+1. Get the **current** live URL (never reuse an old one):
+   ```bash
+   bash /content/twinmind-api/url.sh          # prints the current URL
+   ```
+   The admin **Overview → Live public link** card also always shows the current URL (auto-refreshes).
+2. Re-run the launcher: it is **idempotent**. If server **and tunnel** are healthy it reuses them (URL unchanged); if the tunnel has died it restarts the stack and prints a fresh URL:
+   ```bash
+   !curl -fsSL https://raw.githubusercontent.com/Silence-X-Proton/twinmind-api/main/colab.sh | bash
+   ```
+3. **Want a URL that never changes?** Use a Cloudflare **named tunnel**:
+   ```bash
+   !TWINMIND_TUNNEL_TOKEN='<your-cloudflare-tunnel-token>' bash /content/twinmind-api/colab.sh
+   ```
+   (Cloudflare Zero Trust → Networks → Tunnels → create → copy the connector token.) Stable URL across restarts.
+
 ### New tunnel URL (URLs rotate on restart)
 ```bash
 pkill -f cloudflared; sleep 2

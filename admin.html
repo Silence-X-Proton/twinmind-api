@@ -141,6 +141,19 @@
 
   <!-- OVERVIEW -->
   <section id="t-overview">
+    <div class="card">
+      <h3>Live public link</h3>
+      <div class="row">
+        <span class="muted" id="tunState">checking…</span>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <input id="tunUrl" class="mono" readonly placeholder="loading…" style="flex:1;min-width:220px">
+        <button class="ghost" id="tunCopy">Copy</button>
+        <button class="ghost" id="tunOpen">Open /admin</button>
+        <button class="ghost" id="tunRef">⟳</button>
+      </div>
+      <p class="muted">Quick-tunnel URLs <b>change whenever the tunnel restarts</b> — an old link then shows Cloudflare <b>1033/404</b>. Always use the link shown here. For a link that never changes, launch with a named tunnel token (<code>TWINMIND_TUNNEL_TOKEN</code>).</p>
+    </div>
     <div class="grid" id="statGrid"></div>
     <div class="card">
       <h3>Per-model usage</h3>
@@ -289,11 +302,26 @@ qa('.tab').forEach(t=>t.onclick=()=>{
   if(t.dataset.t==='requests') loadRequests();
   if(t.dataset.t==='pool') loadPool();
   if(t.dataset.t==='health') loadHealth();
-  if(t.dataset.t==='overview') loadStats();
+  if(t.dataset.t==='overview'){ loadStats(); loadTunnel(); }
   if(t.dataset.t==='terminal' && term && termFit) { setTimeout(()=>{ try{termFit.fit();}catch(e){} },60); }
 });
 
 function setGateway(on){ q('#gstate').textContent = on?'ON':'OFF'; q('#gstate').className = 'gstate '+(on?'on':'off'); }
+
+// live tunnel link (quick-tunnel URLs rotate on restart)
+async function loadTunnel(){
+  try{
+    const d = await api('/tunnel');
+    q('#tunUrl').value = d.url || '';
+    const st = d.tunnel_running ? ('running · '+d.mode+' tunnel') : 'NOT running';
+    q('#tunState').textContent = d.url ? (st) : ('no URL yet · '+st);
+    q('#tunState').style.color = d.tunnel_running ? '' : '#e6a2a2';
+    q('#tunUrl').dataset.admin = d.admin || '';
+  }catch(e){ q('#tunState').textContent = 'tunnel info unavailable: '+e.message; }
+}
+q('#tunCopy').onclick = ()=>{ const u=q('#tunUrl').value; if(!u) return toast('No URL yet'); navigator.clipboard.writeText(u+'/admin'); toast('Copied '+u+'/admin'); };
+q('#tunOpen').onclick = ()=>{ const a=q('#tunUrl').dataset.admin||''; if(!a) return toast('No URL yet'); window.open(a,'_blank'); };
+q('#tunRef').onclick = loadTunnel;
 let MODELS = [];
 function fillModelSelects(models){
   const opts = ['auto', ...models.map(m=>m.id)];
@@ -471,8 +499,8 @@ q('#destroyBtn').onclick = async ()=>{
 };
 
 // init
-loadModels(); loadStats();
-setInterval(()=>{ if(!q('#t-overview').classList.contains('hide')) loadStats(); }, 8000);
+loadModels(); loadStats(); loadTunnel();
+setInterval(()=>{ if(!q('#t-overview').classList.contains('hide')){ loadStats(); loadTunnel(); } }, 8000);
 </script>
 </body>
 </html>
