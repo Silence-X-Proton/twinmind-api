@@ -81,7 +81,10 @@ curl -fsSL https://github.com/cloudflare/cloudflared/releases/latest/download/cl
 chmod +x /usr/local/bin/cloudflared
 
 # start quick tunnel (background)
-nohup cloudflared tunnel --url http://localhost:8080 > tunnel.log 2>&1 &
+# IMPORTANT: --protocol http2 forces TCP:443. Colab (and many restricted
+# networks) block Cloudflare QUIC (UDP:7844) which is cloudflared's default,
+# causing the tunnel to silently never register -> no trycloudflare URL.
+nohup cloudflared tunnel --url http://localhost:8080 --protocol http2 --no-autoupdate > tunnel.log 2>&1 &
 sleep 12
 
 # print your public URL
@@ -223,7 +226,7 @@ tail -f ~/twinmind-api/tunnel.log
 ```bash
 pkill -f cloudflared; sleep 2
 cd ~/twinmind-api
-nohup cloudflared tunnel --url http://localhost:8080 > tunnel.log 2>&1 &
+nohup cloudflared tunnel --url http://localhost:8080 --protocol http2 --no-autoupdate > tunnel.log 2>&1 &
 sleep 12 && grep -oE 'https://[a-z0-9-]+\.trycloudflare.com' tunnel.log | head -1
 ```
 

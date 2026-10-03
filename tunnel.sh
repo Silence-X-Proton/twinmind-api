@@ -6,10 +6,14 @@
 #   ./tunnel.sh token <TUNNEL_TOKEN>  -> named tunnel via token (dashboard-managed)
 #   ./tunnel.sh install               -> install cloudflared if missing
 #
+# NOTE: Colab / most restricted networks block Cloudflare's QUIC (UDP:7844).
+#       We force --protocol http2 (TCP:443) which works everywhere Colab does.
 set -euo pipefail
 cd "$(dirname "$0")"
 
 PORT="${TWINMIND_PORT:-8080}"
+# Protocol to use for the tunnel edge connection. http2 = TCP, works on Colab.
+PROTO="${TWINMIND_TUNNEL_PROTOCOL:-http2}"
 
 install_cf() {
   if command -v cloudflared >/dev/null 2>&1; then return; fi
@@ -20,9 +24,17 @@ install_cf() {
     aarch64|arm64) pkg=cloudflared-linux-arm64 ;;
     *) echo "unsupported arch $arch"; exit 1 ;;
   esac
-  curl -fsSL "https://github.com/cloudflare/cloudflared/releases/latest/download/${pkg}" -o /usr/local/bin/cloudflared
-  chmod +x /usr/local/bin/cloudflared
-  cloudflared --version
+  # /usr/local/bin may not exist on all distros
+  mkdir -p /usr/local/bin 2>/dev/null || true
+  if [ -w /usr/local/bin ]; then
+    dest=/usr/local/bin/cloudflared
+  else
+    dest="$PWD/cloudflared"
+  fi
+  curl -fsSL "https://github.com/cloudflare/cloudflared/releases/latest/download/${pkg}" -o "$dest"
+  chmod +x "$dest"
+  if [ "$dest" != "/usr/local/bin/cloudflared" ] && [ -w /usr/local/bin ]; then cp "$dest" /usr/local/bin/cloudflared; fi
+  "$dest" --version
 }
 
 cmd="${1:-quick}"
@@ -31,8 +43,9 @@ install_cf
 case "$cmd" in
   install) echo "[+] cloudflared ready" ;;
   quick)
-    echo "[*] starting quick tunnel -> http://localhost:${PORT}"
-    exec cloudflared tunnel --url "http://localhost:${PORT}" --no-autoupdate 2>&1 | tee tunnel.log
+    echo "[*] starting quick tunnel -> http://localhost:${PORT} (protocol=${PROTO})"
+    exec cloudflared tunnel --url "http://localhost:${PORT}" \
+      --protocol "$PROTO" --no-autoupdate 2>&1 | tee tunnel.log
     ;;
   token)
     token="${2:-${TUNNEL_TOKEN:-}}"
