@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-DIR="${TWINMIND_DIR:-/content/twinmind-api}"
+DIR="${TWINMIND_DIR:-/opt/twinmind-api}"
 u=""
 [ -s "$DIR/public_url.txt" ] && u="$(head -1 "$DIR/public_url.txt" 2>/dev/null)"
 if [ -z "$u" ] && [ -s "$DIR/tunnel.log" ]; then
