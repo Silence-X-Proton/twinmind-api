@@ -34,6 +34,9 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import shutil
+import struct
+import subprocess
 import time
 import uuid
 from collections import deque
@@ -42,7 +45,7 @@ from typing import Any, AsyncGenerator, Iterable, Optional
 
 import httpx
 import uvicorn
-from fastapi import FastAPI, Header, HTTPException, Request
+from fastapi import FastAPI, Header, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 
 from accounts import AccountPool
@@ -832,6 +835,121 @@ async def admin_terminal(payload: dict, key: Optional[str] = None):
         return {"cmd": cmd, "cwd": cwd, "exit": proc.returncode, "output": (out or b"").decode("utf-8", "replace")}
     except Exception as e:
         return {"cmd": cmd, "cwd": cwd, "exit": None, "output": f"error: {e}"}
+
+
+@app.get("/admin/api/health")
+async def admin_health(key: Optional[str] = None):
+    """JSON health for the admin UI (never returns the tunnel/edge HTML 504 page)."""
+    _check_admin(key)
+    s = pool.stats()
+    return {
+        "status": "ok",
+        "gateway": STATE.gateway_enabled,
+        "uptime": round(time.time() - STATE.started, 1),
+        "pool": {"size": s["size"], "available": s["available"]},
+        "total_requests": STATE.total_requests,
+        "failed_requests": STATE.failed_requests,
+        "models": len(STATE.models),
+        "pid": os.getpid(),
+    }
+
+
+# --------------------------------------------------------------------------- #
+# Real interactive terminal (PTY over WebSocket)                              #
+# --------------------------------------------------------------------------- #
+def _pty_shell() -> str:
+    for sh in ("bash", "sh"):
+        p = shutil.which(sh)
+        if p:
+            return p
+    return "/bin/bash"
+
+
+@app.websocket("/admin/ws/terminal")
+async def admin_ws_terminal(ws: WebSocket):
+    """Full interactive Linux shell (PTY) over a WebSocket, rendered by xterm.js.
+    If ADMIN_KEY is set, pass ?key=<ADMIN_KEY> (xterm client does this)."""
+    # auth (query param), checked before accept so browsers get a clean close
+    if ADMIN_KEY and ws.query_params.get("key") != ADMIN_KEY:
+        await ws.close(code=4401)
+        return
+    await ws.accept()
+
+    import pty
+
+    shell = _pty_shell()
+    master, slave = pty.openpty()
+    env = dict(os.environ)
+    env.update({"TERM": "xterm-256color", "COLORTERM": "truecolor",
+                "PS1": env.get("PS1", "\\[\\e[38;5;250m\\]twinmind\\[\\e[0m\\]:\\w$ ")})
+    proc = subprocess.Popen(
+        [shell], stdin=slave, stdout=slave, stderr=slave,
+        cwd=HERE, env=env, preexec_fn=os.setsid, close_fds=True,
+    )
+    os.close(slave)
+    loop = asyncio.get_running_loop()
+    queue: asyncio.Queue = asyncio.Queue()
+
+    def _on_read():
+        try:
+            data = os.read(master, 65536)
+        except OSError:
+            data = b""
+        if data:
+            loop.call_soon_threadsafe(queue.put_nowait, data)
+        else:
+            loop.call_soon_threadsafe(queue.put_nowait, None)
+
+    loop.add_reader(master, _on_read)
+
+    async def _pump_out():
+        while True:
+            data = await queue.get()
+            if data is None:
+                break
+            await ws.send_bytes(data)
+
+    pump = asyncio.create_task(_pump_out())
+    try:
+        while True:
+            msg = await ws.receive()
+            if msg.get("type") == "websocket.disconnect":
+                break
+            if msg.get("bytes") is not None:
+                os.write(master, msg["bytes"])
+            elif msg.get("text") is not None:
+                t = msg["text"]
+                if t.startswith("__RESIZE__"):
+                    try:
+                        _, cols, rows = t.split(":")
+                        import fcntl, termios
+                        fcntl.ioctl(master, termios.TIOCSWINSZ,
+                                    struct.pack("HHHH", int(rows), int(cols), 0, 0))
+                    except Exception:
+                        pass
+                else:
+                    os.write(master, t.encode())
+    except WebSocketDisconnect:
+        pass
+    except Exception:
+        pass
+    finally:
+        try:
+            loop.remove_reader(master)
+        except Exception:
+            pass
+        pump.cancel()
+        try:
+            os.killpg(os.getpgid(proc.pid), 15)
+        except Exception:
+            try:
+                proc.terminate()
+            except Exception:
+                pass
+        try:
+            os.close(master)
+        except Exception:
+            pass
 
 
 @app.post("/admin/api/destroy")
