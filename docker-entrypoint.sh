@@ -7,8 +7,20 @@
 # gives you a public HTTPS URL already (Render/Fly). Then set NO_TUNNEL=1.
 set -uo pipefail
 
-cd "$(dirname "$0")/.." 2>/dev/null || true
-cd /app 2>/dev/null || true
+# Resolve the app directory robustly:
+# In the container the file lives at /usr/local/bin and the app is at /app.
+# Locally it lives next to app.py. Prefer whichever candidate actually has app.py.
+SCRIPT_DIR="$(cd "$(dirname "$0")" 2>/dev/null && pwd || echo .)"
+APP_DIR=""
+for cand in "$SCRIPT_DIR" /app /content/twinmind-api "$PWD"; do
+  if [ -f "$cand/app.py" ]; then APP_DIR="$cand"; break; fi
+done
+if [ -z "$APP_DIR" ]; then
+  echo "[entrypoint] FATAL: could not find app.py (looked in: $SCRIPT_DIR, /app, /content/twinmind-api, $PWD)"
+  exit 1
+fi
+cd "$APP_DIR"
+echo "[entrypoint] app dir: $APP_DIR"
 
 # Many PaaS platforms inject PORT; honor it for the internal API bind.
 if [ -n "${PORT:-}" ] && [ -z "${TWINMIND_PORT:-}" ]; then
