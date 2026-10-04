@@ -29,6 +29,8 @@ import signal
 import uuid
 from typing import Any, AsyncGenerator, Optional
 
+from gateway_stream import StreamError, iter_sse, json_event
+
 CLAUDE_BIN = os.environ.get("TWINMIND_CLAUDE_BIN", "claude")
 
 # Files/commands the agent is allowed to touch. Root, unrestricted, as requested.
@@ -435,25 +437,33 @@ async def stream_openai(
                     body = (await resp.aread()).decode("utf-8", "replace")
                     yield {"type": "error", "message": f"HTTP {resp.status_code}: {body[:1500]}"}
                     return
-                async for line in resp.aiter_lines():
-                    if not line or not line.startswith("data:"):
-                        continue
-                    data = line[5:].strip()
-                    if data == "[DONE]":
+                complete = False
+                finish_reason = None
+                async for data in iter_sse(resp.aiter_text()):
+                    if data.strip() == "[DONE]":
+                        complete = True
                         break
-                    try:
-                        o = json.loads(data)
-                    except json.JSONDecodeError:
-                        continue
-                    if o.get("error"):
-                        yield {"type": "error", "message": str(o["error"])[:1500]}
-                        continue
-                    for ch in o.get("choices") or []:
-                        delta = ch.get("delta") or {}
+                    event = json_event(data)
+                    if event.get("error"):
+                        yield {"type": "error", "message": "Provider stream failed; partial output was preserved"}
+                        return
+                    if event.get("usage"):
+                        yield {"type": "usage", "usage": event["usage"],
+                               "estimated": bool(event.get("usage_estimated"))}
+                    for choice in event.get("choices") or []:
+                        delta = choice.get("delta") or {}
                         if delta.get("content"):
                             yield {"type": "text", "text": delta["content"]}
                         if delta.get("reasoning_content"):
                             yield {"type": "thinking", "text": delta["reasoning_content"]}
-        yield {"type": "result", "text": "", "is_error": False}
+                        if delta.get("tool_calls"):
+                            # Transport only: never execute a partial argument object.
+                            yield {"type": "tool_call_delta", "tool_calls": delta["tool_calls"]}
+                        if choice.get("finish_reason") is not None:
+                            finish_reason = choice["finish_reason"]
+                if not complete:
+                    raise StreamError("Provider disconnected before [DONE]; response is incomplete")
+        yield {"type": "result", "text": "", "is_error": False,
+               "finish_reason": finish_reason, "truncated": finish_reason == "length"}
     except Exception as e:
         yield {"type": "error", "message": f"{type(e).__name__}: {e}"}

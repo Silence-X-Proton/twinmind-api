@@ -49,6 +49,7 @@ from fastapi import FastAPI, Header, HTTPException, Request, WebSocket, WebSocke
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 
 from accounts import AccountPool
+from gateway_stream import Capture, StreamError, upstream_events, with_heartbeat
 
 # --------------------------------------------------------------------------- #
 # Config                                                                       #
@@ -73,6 +74,9 @@ REQ_PER_ACCOUNT = int(os.environ.get("TWINMIND_REQ_PER_ACCOUNT", "300"))
 ROTATE_INTERVAL = int(os.environ.get("TWINMIND_ROTATE_INTERVAL", "0"))
 HEARTBEAT = float(os.environ.get("TWINMIND_HEARTBEAT", "15"))
 REQUEST_LOG_SIZE = int(os.environ.get("TWINMIND_REQUEST_LOG", "1000"))
+STREAM_IDLE_TIMEOUT = float(os.environ.get("TWINMIND_STREAM_IDLE_TIMEOUT", "180"))
+STREAM_FRAME_LIMIT = int(os.environ.get("TWINMIND_STREAM_FRAME_LIMIT", str(2 * 1024 * 1024)))
+STREAM_LOG_CHARS = int(os.environ.get("TWINMIND_STREAM_LOG_CHARS", str(256 * 1024)))
 
 STATIC_CATALOG = [
     ("google", "Google", [
@@ -335,23 +339,17 @@ async def _run_chat(query: str, model: str, session_id: Optional[str]) -> tuple[
             text_parts: list[str] = []
             think_parts: list[str] = []
             sid = session_id
-            buf = ""
-            async for chunk in resp.aiter_text():
-                buf += chunk
-                blocks = buf.split("\n\n")
-                buf = blocks.pop()
-                for b in blocks:
-                    ev = _parse_sse_block(b)
-                    if not ev:
-                        continue
+            try:
+                async for ev in upstream_events(resp, STREAM_FRAME_LIMIT):
                     t = ev.get("type")
                     if t == "run_start":
                         sid = ev.get("session_id", sid)
-                    elif t == "text_delta":
+                    elif t in ("text_start", "text_delta"):
                         text_parts.append(ev.get("content", ""))
-                    elif t == "thinking_delta":
+                    elif t in ("thinking_start", "thinking_delta"):
                         think_parts.append(ev.get("content", ""))
-            await resp.aclose()
+            finally:
+                await resp.aclose()
             _account_done(acc)
             return "".join(text_parts), "".join(think_parts), sid
     raise RuntimeError(f"All accounts failed. Last: {last_err}")
@@ -452,6 +450,10 @@ async def chat_completions(
     if not isinstance(messages, list) or not messages:
         raise HTTPException(status_code=400, detail="'messages' must be a non-empty list")
 
+    if body.get("tools") or body.get("functions"):
+        raise HTTPException(status_code=400, detail=(
+            "This TwinMind chat endpoint does not support native tools. "
+            "Use a provider with native tool calling; tool fields cannot be silently ignored."))
     model = _norm_model(body.get("model"))
     stream = bool(body.get("stream", False))
     query = _flatten_messages(messages)
@@ -462,8 +464,9 @@ async def chat_completions(
     started = time.time()
     in_tok = _tok(query)
 
-    def finalize(text: str, thinking: str, sid: Optional[str], ok: bool) -> None:
-        out_tok = _tok(text)
+    def finalize(text: str, thinking: str, sid: Optional[str], ok: bool,
+                 out_chars: Optional[int] = None, log_truncated: bool = False) -> None:
+        out_tok = _tok(text) if out_chars is None else max(0, out_chars // 4)
         STATE.total_requests += 1
         STATE.total_in_tokens += in_tok
         STATE.total_out_tokens += out_tok
@@ -477,6 +480,7 @@ async def chat_completions(
             "prompt": query, "output": text,
             "thinking": thinking, "session": sid,
             "duration": round(time.time() - started, 3),
+            "log_truncated": log_truncated, "usage_estimated": True,
         })
 
     if not stream:
@@ -511,23 +515,20 @@ async def chat_completions(
                 text_parts: list[str] = []
                 think_parts: list[str] = []
                 sid = session_id
-                buf = ""
-                async for chunk in resp.aiter_text():
-                    buf += chunk
-                    blocks = buf.split("\n\n")
-                    buf = blocks.pop()
-                    for b in blocks:
-                        ev = _parse_sse_block(b)
-                        if not ev:
-                            continue
+                try:
+                    async for ev in upstream_events(resp, STREAM_FRAME_LIMIT):
                         t = ev.get("type")
                         if t == "run_start":
                             sid = ev.get("session_id", sid)
-                        elif t == "text_delta":
+                        elif t in ("text_start", "text_delta"):
                             text_parts.append(ev.get("content", ""))
-                        elif t == "thinking_delta":
+                        elif t in ("thinking_start", "thinking_delta"):
                             think_parts.append(ev.get("content", ""))
-                await resp.aclose()
+                except (StreamError, httpx.HTTPError) as exc:
+                    finalize("".join(text_parts), "".join(think_parts), sid, False)
+                    raise HTTPException(status_code=502, detail="Upstream response incomplete") from exc
+                finally:
+                    await resp.aclose()
                 text = "".join(text_parts)
                 thinking = "".join(think_parts)
                 _account_done(acc)
@@ -590,68 +591,69 @@ async def chat_completions(
                 continue
 
             acc.mark_ok()
-            yield frame({"role": "assistant", "content": ""})
-
-            q: asyncio.Queue = asyncio.Queue(maxsize=4000)
-            DONE = object()
-
-            async def reader():
-                try:
-                    async for chunk in resp.aiter_text():
-                        await q.put(chunk)
-                except Exception as e:
-                    await q.put(("__err__", str(e)))
-                finally:
-                    await q.put(DONE)
-
-            rt = asyncio.create_task(reader())
-            buf = ""
+            full_text = Capture(STREAM_LOG_CHARS)
+            full_think = Capture(STREAM_LOG_CHARS)
             sid = session_id
             finished = False
-            full_text: list[str] = []
-            full_think: list[str] = []
+            failure = None
+            events = with_heartbeat(upstream_events(resp, STREAM_FRAME_LIMIT),
+                                    HEARTBEAT, STREAM_IDLE_TIMEOUT)
             try:
-                while True:
-                    try:
-                        item = await asyncio.wait_for(q.get(), timeout=HEARTBEAT)
-                    except asyncio.TimeoutError:
+                yield frame({"role": "assistant", "content": ""})
+                async for ev in events:
+                    if await request.is_disconnected():
+                        raise asyncio.CancelledError
+                    if ev is None:
                         yield ": ping\n\n"
                         continue
-                    if item is DONE:
-                        break
-                    if isinstance(item, tuple) and item and item[0] == "__err__":
-                        break
-                    buf += item
-                    blocks = buf.split("\n\n")
-                    buf = blocks.pop()
-                    for b in blocks:
-                        ev = _parse_sse_block(b)
-                        if not ev:
-                            continue
-                        t = ev.get("type")
-                        if t == "run_start":
-                            sid = ev.get("session_id", sid)
-                            if sid:
-                                yield frame({"twinmind_session": sid})
-                        elif t == "text_delta":
-                            full_text.append(ev.get("content", ""))
-                            yield frame({"content": ev.get("content", "")})
-                        elif t == "thinking_delta":
-                            full_think.append(ev.get("content", ""))
-                            yield frame({"reasoning_content": ev.get("content", "")})
-                        elif t == "done":
-                            yield frame({}, finish="stop")
-                            finished = True
+                    t = ev.get("type")
+                    if t == "run_start":
+                        sid = ev.get("session_id", sid)
+                        if sid:
+                            yield frame({"twinmind_session": sid})
+                    elif t in ("text_start", "text_delta"):
+                        content = ev.get("content", "")
+                        full_text.append(content)
+                        yield frame({"content": content})
+                    elif t in ("thinking_start", "thinking_delta"):
+                        content = ev.get("content", "")
+                        full_think.append(content)
+                        yield frame({"reasoning_content": content})
+                    elif t == "done":
+                        if not full_text.chars and not full_think.chars:
+                            raise StreamError("Upstream completed without any content")
+                        finished = True
+            except (StreamError, httpx.HTTPError) as exc:
+                # Never replay generation once any content has been delivered.
+                # Clients retain partial text and get an explicit failure, not stop.
+                failure = (str(exc) if isinstance(exc, StreamError)
+                           else "Upstream connection interrupted; response is incomplete")
             finally:
-                rt.cancel()
                 try:
-                    await resp.aclose()
+                    await events.aclose()
                 finally:
-                    await client.aclose()
-            if not finished:
+                    try:
+                        await resp.aclose()
+                    finally:
+                        await client.aclose()
+                finalize(full_text.text, full_think.text, sid, finished and not failure,
+                         full_text.chars, full_text.truncated or full_think.truncated)
+            if not finished or failure:
+                error = {"error": {"type": "upstream_stream_error",
+                         "message": failure or "Upstream response incomplete",
+                         "partial": bool(full_text.chars or full_think.chars),
+                         "request_id": rid}}
+                yield "data: " + json.dumps(error) + "\n\n"
+            else:
                 yield frame({}, finish="stop")
-            _account_done(acc)
-            finalize("".join(full_text), "".join(full_think), sid, True)
+                options = body.get("stream_options") or {}
+                if isinstance(options, dict) and options.get("include_usage"):
+                    out_tok = full_text.chars // 4
+                    usage = {"id": response_id, "object": "chat.completion.chunk",
+                             "created": created, "model": model, "choices": [],
+                             "usage": {"prompt_tokens": in_tok, "completion_tokens": out_tok,
+                                       "total_tokens": in_tok + out_tok}, "usage_estimated": True}
+                    yield "data: " + json.dumps(usage) + "\n\n"
             yield "data: [DONE]\n\n"
             return
 

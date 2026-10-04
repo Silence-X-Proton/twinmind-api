@@ -320,9 +320,10 @@ async def chat(sid: str, request: Request):
                     elif t == "result":
                         if ev.get("session_id"):
                             new_cc_sid = ev["session_id"]
-                        is_error = bool(ev.get("is_error"))
+                        is_error = is_error or bool(ev.get("is_error"))
                     elif t == "error":
                         is_error = True
+                        final_text.append("\n[Error] " + str(ev.get("message") or "Generation failed"))
                     yield _sse(ev)
             else:
                 # OpenAI-compatible engine: TwinMind gateway or a custom provider.
@@ -348,6 +349,11 @@ async def chat(sid: str, request: Request):
                             final_text.append(ev.get("text", ""))
                         elif ev.get("type") == "error":
                             is_error = True
+                            final_text.append("\n[Error] " + str(ev.get("message") or "Generation failed"))
+                        elif ev.get("type") == "tool_call_delta":
+                            trace.append(ev)
+                        elif ev.get("type") == "result" and ev.get("truncated"):
+                            final_text.append("\n[Output stopped at the provider token limit.]")
                         yield _sse(ev)
         except asyncio.CancelledError:
             is_error = True

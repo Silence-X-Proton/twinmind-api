@@ -576,3 +576,41 @@ on** — the agent loop, shell and file tools stay the same.
 
 The `x-twinmind-model` header is honoured only when the request goes through the
 built-in bridge; with a real `ANTHROPIC_API_KEY` the CLI uses Anthropic directly.
+
+## Gateway streaming reliability
+
+The OpenAI-compatible chat route now preserves `text_start` and reasoning-start
+content, handles fragmented SSE and CRLF line endings, and reads a complete
+final event even when its trailing blank line is missing.
+
+- Heartbeats keep slow **response-body** streams alive without cancelling the
+  pending upstream read. They do not extend the provider's token/context limits.
+- A dropped connection, malformed event, empty response, or idle timeout is an
+  explicit failure, not a successful `finish_reason: stop`. Already delivered
+  partial output is preserved; generation is not automatically replayed after
+  content delivery (avoiding duplicate output or tool execution).
+- Streaming request logs keep bounded previews instead of the entire response.
+  This preview cap does not truncate the response sent to the client.
+- `stream_options: {"include_usage": true}` returns a final usage chunk. The
+  gateway's character-based token counts are **estimates**, not provider billing
+  measurements; responses mark them with `usage_estimated: true`.
+
+| Setting | Default | Scope |
+|---|---|---|
+| `TWINMIND_HEARTBEAT` | `15` seconds | Response-body heartbeat interval |
+| `TWINMIND_STREAM_IDLE_TIMEOUT` | `180` seconds | Maximum wait without a decoded upstream event |
+| `TWINMIND_STREAM_FRAME_LIMIT` | `2097152` characters | One SSE frame, not total output |
+| `TWINMIND_STREAM_LOG_CHARS` | `262144` characters | Retained preview per output/reasoning log |
+
+The native TwinMind `/v1/chat/completions` adapter does **not** provide native
+function calling. Requests containing `tools` or `functions` now receive an
+explicit 400 instead of silently dropping those fields. A custom compatible
+provider's tool-call deltas are preserved by the chat transport, but that chat
+transport does not execute tools. The existing Claude Code bridge remains an
+experimental, buffered tool-emulation path, not native provider tool streaming.
+
+Verification uses offline synthetic streams: more than 12 MB of text, split
+Unicode/CRLF frames, delayed responses, disconnects, malformed events, partial
+tool arguments, and token-limit endings. These tests establish transport
+behavior—not universal model availability, unlimited generation, zero refusal,
+or an end-to-end production latency guarantee.
