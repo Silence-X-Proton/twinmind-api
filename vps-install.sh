@@ -93,7 +93,7 @@ c_in "TwinMind VPS installer  (arch=$ARCH, dir=$DIR, port=$PORT)"
 if ! have python3 || ! have git || ! have curl; then
   c_in "Installing base packages (apt)…"
   export DEBIAN_FRONTEND=noninteractive
-  apt-get update -y -q && apt-get install -y -q python3 python3-venv python3-pip git curl ca-certificates
+  apt-get update -y -q && apt-get install -y -q python3 python3-venv python3-pip git curl ca-certificates nodejs npm
 fi
 PYV="$(python3 -c 'import sys;print("%d.%d"%sys.version_info[:2])')"
 c_ok "python3 $PYV, git, curl present"
@@ -116,8 +116,24 @@ if [ ! -x "$DIR/.venv/bin/python" ]; then
 fi
 c_in "Installing Python dependencies…"
 "$DIR/.venv/bin/pip" install -q --upgrade pip
-"$DIR/.venv/bin/pip" install -q -r "$DIR/requirements.txt" || "$DIR/.venv/bin/pip" install -q fastapi 'uvicorn[standard]' httpx
+"$DIR/.venv/bin/pip" install -q -r "$DIR/requirements.txt" || "$DIR/.venv/bin/pip" install -q fastapi 'uvicorn[standard]' httpx python-multipart
 c_ok "dependencies installed"
+
+# --------------------------------------------------------------- claude code --
+# Node.js + Claude Code CLI so the /agent studio works on this host.
+# Never fatal: without it the chat + gateway engines still run.
+if ! have node; then
+  c_in "Installing Node.js…"
+  export DEBIAN_FRONTEND=noninteractive
+  { apt-get update -y -q && apt-get install -y -q nodejs npm; } >/dev/null 2>&1 || c_wn "node install failed"
+fi
+if have npm; then
+  if ! have claude; then
+    c_in "Installing Claude Code CLI…"
+    npm install -g @anthropic-ai/claude-code@latest >/dev/null 2>&1 || c_wn "Claude Code install failed"
+  fi
+  have claude && c_ok "Claude Code CLI $(claude --version 2>/dev/null | head -1)"
+fi
 
 # ----------------------------------------------------------------- cloudflared --
 if [ "$NO_TUNNEL" != "1" ]; then

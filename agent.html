@@ -151,11 +151,49 @@
   .mdd .opt:hover{background:rgba(255,255,255,.06)}
   .mdd .grp{padding:7px 10px 3px;font-size:10.5px;letter-spacing:.8px;text-transform:uppercase;color:var(--mut)}
   .mdd .opt.sel{background:rgba(200,182,255,.14);color:#fff}
+  /* ---------- floating files button + backdrop ---------- */
+  .fab{position:fixed;right:14px;bottom:96px;z-index:35;width:54px;height:54px;border-radius:16px;
+    display:flex;align-items:center;justify-content:center;cursor:pointer;
+    background:linear-gradient(180deg,#3a4257,#232a38);border:1px solid rgba(200,182,255,.4);
+    box-shadow:0 10px 26px -8px rgba(0,0,0,.8), inset 0 1px 0 rgba(255,255,255,.12);color:var(--silver-hi)}
+  .fab:hover{filter:brightness(1.15)}
+  .fab .badge{position:absolute;top:-5px;right:-5px;min-width:20px;height:20px;border-radius:999px;
+    background:#c8b6ff;color:#14181e;font-size:11px;font-weight:800;display:none;align-items:center;justify-content:center;padding:0 5px}
+  .fab .badge.show{display:flex}
+  .fab .ic{font-size:22px;line-height:1}
+  .backdrop{position:fixed;inset:0;background:rgba(4,6,9,.6);backdrop-filter:blur(2px);z-index:28;display:none}
+  .backdrop.show{display:block}
   @media (max-width:900px){
-    .side{position:fixed;z-index:30;height:100%;margin-left:0;box-shadow:var(--shadow)}
-    .side.hidden{margin-left:-280px} .side{width:280px;flex-basis:280px}
-    .drawer{position:fixed;right:0;z-index:30;height:100%;box-shadow:var(--shadow)}
+    .side{position:fixed;z-index:32;height:100%;margin-left:0;box-shadow:var(--shadow);width:82vw;max-width:320px;flex-basis:auto}
+    .side.hidden{margin-left:-90vw}
+    .drawer{position:fixed;right:0;top:0;z-index:32;height:100%;width:92vw;max-width:420px;flex-basis:auto;
+      box-shadow:var(--shadow);border-left:1px solid var(--line-hi)}
     .drawer.hidden{display:none}
+    .top{padding:9px 10px;gap:7px;position:sticky;top:0;z-index:20}
+    .top .title{font-size:13.5px}
+    #ccpill{display:none}
+    .chat{padding:12px 10px 4px}
+    .msg{gap:8px;margin-bottom:13px}
+    .msg .av{width:26px;height:26px;flex-basis:26px;font-size:13px}
+    .msg .bubble{padding:10px 11px;font-size:14.5px;border-radius:12px}
+    .composer{padding:9px 10px calc(11px + env(safe-area-inset-bottom))}
+    textarea#msg{min-height:44px;font-size:16px} /* 16px stops iOS zoom-on-focus */
+    .send{width:44px;height:44px;flex-basis:44px}
+    .inputrow{gap:7px}
+    .btn{padding:10px 13px} /* bigger touch targets */
+    .empty{margin:6vh auto}
+    .empty h2{font-size:21px}
+    .chips{gap:7px}
+    .chip{font-size:13px;text-align:left;width:100%}
+    .fab{bottom:88px;right:12px;width:50px;height:50px}
+    .mdd{position:fixed;right:10px;left:10px;top:auto;bottom:auto;max-height:60vh}
+    .card{padding:14px;border-radius:14px}
+    .toast{left:10px;right:10px;transform:none;bottom:12px}
+  }
+  @media (max-width:420px){
+    .top{gap:6px}
+    .mbtn{max-width:104px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .chip{font-size:12.5px}
   }
 </style>
 </head>
@@ -237,6 +275,12 @@
       </div>
     </div>
   </section>
+
+  <!-- floating workspace-files button (always reachable, mobile friendly) -->
+  <div class="fab" id="fab" onclick="toggleFiles()" title="Workspace files">
+    <span class="ic">📁</span><span class="badge" id="fabbadge">0</span>
+  </div>
+  <div class="backdrop" id="backdrop" onclick="closeOverlays()"></div>
 </div>
 
 <!-- PROVIDERS MODAL -->
@@ -329,7 +373,12 @@ async function delSession(id){
     loadSessions(); toast('Deleted');
   }catch(e){ toast('Delete failed: '+e.message); }
 }
-function toggleSide(){ $('side').classList.toggle('hidden'); }
+function toggleSide(){
+  const willOpen = $('side').classList.contains('hidden');
+  $('side').classList.toggle('hidden');
+  if(willOpen && isMobile()){ $('drawer').classList.add('hidden'); showBackdrop(true); }
+  else if(!willOpen){ showBackdrop(false); }
+}
 
 // ------------------------------------------------------------- messages -----
 function renderMessages(){
@@ -444,7 +493,19 @@ async function reloadCurrent(){
 }
 
 // ---------------------------------------------------------------- files -----
-function toggleFiles(){ $('drawer').classList.toggle('hidden'); if(!$('drawer').classList.contains('hidden')) refreshFiles(); }
+function isMobile(){ return window.matchMedia('(max-width:900px)').matches; }
+function showBackdrop(on){ $('backdrop').classList.toggle('show', !!on); }
+function closeOverlays(){ $('drawer').classList.add('hidden'); $('side').classList.add('hidden'); showBackdrop(false); }
+function toggleFiles(){
+  const willOpen = $('drawer').classList.contains('hidden');
+  $('drawer').classList.toggle('hidden');
+  if(willOpen){
+    if(isMobile()){ $('side').classList.add('hidden'); showBackdrop(true); }
+    refreshFiles();
+  } else {
+    showBackdrop(false);
+  }
+}
 function pickFiles(){ $('fileinput').click(); }
 async function doUpload(files){
   if(!S.sid) { await newSession(); }
@@ -463,9 +524,16 @@ function renderAttachments(){
   $('attachrow').innerHTML = S.attachments.map((p,i)=>`<span class="chipfile">📎 ${esc(p.split('/').pop())}<b onclick="S.attachments.splice(${i},1);renderAttachments()">✕</b></span>`).join('');
 }
 async function refreshFiles(){
-  if(!S.sid) return;
-  try{ const d = await api(`/agent/api/sessions/${S.sid}/files`); S.files = d.files||[]; renderFiles(); }
-  catch(e){}
+  if(!S.sid){ $('fabbadge').classList.remove('show'); return; }
+  try{
+    const d = await api(`/agent/api/sessions/${S.sid}/files`);
+    S.files = d.files||[];
+    renderFiles();
+    const n = S.files.filter(f=>!f.is_dir).length;
+    const b = $('fabbadge');
+    b.textContent = n > 99 ? '99+' : String(n);
+    b.classList.toggle('show', n > 0);
+  }catch(e){}
 }
 function renderFiles(){
   const el=$('files');

@@ -22,13 +22,18 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 # cloudflared (for quick tunnel if no named-tunnel token is provided)
+# plus Node.js + Claude Code CLI so the /agent studio works inside the container.
 RUN apt-get update \
- && apt-get install -y --no-install-recommends curl ca-certificates \
+ && apt-get install -y --no-install-recommends curl ca-certificates nodejs npm \
  && arch="$(dpkg --print-architecture)" \
  && case "$arch" in amd64) cf=cloudflared-linux-amd64 ;; arm64) cf=cloudflared-linux-arm64 ;; *) cf=cloudflared-linux-amd64 ;; esac \
  && curl -fsSL "https://github.com/cloudflare/cloudflared/releases/latest/download/${cf}" -o /usr/local/bin/cloudflared \
  && chmod +x /usr/local/bin/cloudflared \
+ && npm install -g @anthropic-ai/claude-code@latest >/dev/null 2>&1 || true \
  && apt-get purge -y curl && apt-get autoremove -y && rm -rf /var/lib/apt/lists/*
+
+# Root container: the studio runs Claude Code with full root and no prompts.
+ENV IS_SANDBOX=1
 
 # entrypoint: start api, then a tunnel (named if TWINMIND_TUNNEL_TOKEN set)
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh

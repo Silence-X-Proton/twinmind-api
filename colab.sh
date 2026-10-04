@@ -51,6 +51,7 @@ print_urls(){
   echo ""
   echo "============================================================"
   if [ -n "$u" ]; then
+    ok "CLAUDE CODE STUDIO:     $u/agent"
     ok "PUBLIC BASE (OpenAI):   $u/v1"
     ok "ADMIN DASHBOARD:        $u/admin"
     ok "MODELS:                 $u/v1/models"
@@ -107,7 +108,21 @@ cd "$DIR"
 
 # 2) deps
 say "Installing Python dependencies"
-pip install -q -r requirements.txt 2>/dev/null || pip install -q fastapi "uvicorn[standard]" httpx
+pip install -q -r requirements.txt 2>/dev/null || pip install -q fastapi "uvicorn[standard]" httpx python-multipart
+
+# 2b) Node.js + Claude Code CLI (for the /agent studio). Colab ships node already;
+# on a bare box we install it. Never fatal: the chat engine still works without it.
+if ! command -v node >/dev/null 2>&1; then
+  say "Installing Node.js"
+  { apt-get update -y -q && apt-get install -y -q nodejs npm; } >/dev/null 2>&1 || true
+fi
+if command -v npm >/dev/null 2>&1; then
+  if ! command -v claude >/dev/null 2>&1; then
+    say "Installing Claude Code CLI"
+    npm install -g @anthropic-ai/claude-code@latest >/dev/null 2>&1 || true
+  fi
+  command -v claude >/dev/null 2>&1 && ok "Claude Code CLI $(claude --version 2>/dev/null | head -1)"
+fi
 
 # 3) cloudflared
 if ! command -v cloudflared >/dev/null 2>&1; then

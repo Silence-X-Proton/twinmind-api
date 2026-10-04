@@ -41,8 +41,11 @@ def claude_available() -> bool:
 def _provider_env(provider: Optional[dict]) -> dict:
     """Build env for the Claude Code subprocess.
 
-    A custom provider (kind=anthropic) overrides base_url + key; otherwise we
-    inherit ANTHROPIC_API_KEY / ANTHROPIC_BASE_URL from the server environment.
+    Priority:
+      1. explicit custom provider (Anthropic-compatible) -> its base_url + key
+      2. real ANTHROPIC_API_KEY / ANTHROPIC_BASE_URL from the server env
+      3. NO KEY fallback -> the built-in TwinMind bridge, so Claude Code runs
+         on TwinMind models with zero configuration.
     """
     env = dict(os.environ)
     # Root safe-harbour flag: without it Claude Code refuses
@@ -53,12 +56,19 @@ def _provider_env(provider: Optional[dict]) -> dict:
         base = (provider.get("base_url") or "").strip()
         key = (provider.get("api_key") or "").strip()
         if base:
-            # Accept either an Anthropic-style root or an OpenAI-style /v1 root.
             b = base.rstrip("/")
             env["ANTHROPIC_BASE_URL"] = b[:-3] if b.endswith("/v1") else b
         if key:
             env["ANTHROPIC_API_KEY"] = key
             env["ANTHROPIC_AUTH_TOKEN"] = key
+        return env
+    if not env.get("ANTHROPIC_API_KEY") and not env.get("ANTHROPIC_AUTH_TOKEN"):
+        port = os.environ.get("TWINMIND_PORT", "8080")
+        env["ANTHROPIC_BASE_URL"] = os.environ.get(
+            "TWINMIND_BRIDGE_URL", f"http://127.0.0.1:{port}/anthropic")
+        env["ANTHROPIC_API_KEY"] = env.get("TWINMIND_BRIDGE_KEY", "twinmind-bridge")
+        env["ANTHROPIC_AUTH_TOKEN"] = env["ANTHROPIC_API_KEY"]
+        env["CLAUDE_CODE_SKIP_BEDROCK_AUTH"] = "1"
     return env
 
 

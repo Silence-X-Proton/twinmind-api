@@ -170,6 +170,17 @@ try:
 except Exception as _agent_err:  # pragma: no cover
     print(f"[warn] agent UI not mounted: {_agent_err}")
 
+# Anthropic Messages API <-> TwinMind bridge so Claude Code can run on
+# TwinMind models with no Anthropic key (ANTHROPIC_BASE_URL=/anthropic).
+try:
+    import cc_bridge
+    cc_bridge.set_pool(pool)
+    app.include_router(cc_bridge.router)
+    from cc_bridge import router as _br  # noqa: F401
+    print("[info] Anthropic bridge mounted at /anthropic/v1/messages")
+except Exception as _bridge_err:  # pragma: no cover
+    print(f"[warn] Anthropic bridge not mounted: {_bridge_err}")
+
 
 # --------------------------------------------------------------------------- #
 # Helpers                                                                      #
