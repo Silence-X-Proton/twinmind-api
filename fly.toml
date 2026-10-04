@@ -1,6 +1,6 @@
 # Fly.io config — persistent hosting (alternative to Render).
 # Fly runs the container 24/7 and gives a permanent https URL, so the tunnel
-# never dies on an idle timeout (unlike Google Colab's ephemeral VM).
+# never dies on an idle timeout (unlike ephemeral notebook VMs).
 #
 # Usage:
 #   fly launch --no-deploy      # detect this file

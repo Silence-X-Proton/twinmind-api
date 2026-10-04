@@ -18,23 +18,47 @@ no rate limits, no trace left behind**.
 
 ---
 
-## ⚡ Google Colab — ONE command (easiest)
+## ⚡ Deploy on a VPS — ONE command
 
-Open a Colab cell and paste **this single command**:
+On any fresh Debian/Ubuntu VPS, run **this single command** (as root):
 
 ```bash
-!curl -fsSL https://raw.githubusercontent.com/Silence-X-Proton/twinmind-api/main/colab.sh | bash
+curl -fsSL https://raw.githubusercontent.com/Silence-X-Proton/twinmind-api/main/vps-install.sh | bash
 ```
 
-It installs everything, starts the API, opens a Cloudflare tunnel, and prints:
+That is the whole setup. It **shows every step as it runs** and does it all
+for you:
+
+1. installs system packages (Python, git, curl, **Node.js + npm**)
+2. clones/updates the repo to `/opt/twinmind-api`
+3. creates the Python venv and installs requirements
+4. installs the **Claude Code CLI** (for the `/agent` studio)
+5. installs **cloudflared** (the tunnel)
+6. sets up auto-start: **(a)** systemd services, or **(b)** a self-healing
+   watchdog + `@reboot` cron on hosts without systemd
+7. starts the API + tunnel and verifies local health
+
+At the end it prints your public URLs, including the **Cloudflare
+`trycloudflare.com` URL**:
 
 ```
-PUBLIC BASE (OpenAI):   https://xxxx.trycloudflare.com/v1
-ADMIN DASHBOARD:        https://xxxx.trycloudflare.com/admin
-MODELS:                 https://xxxx.trycloudflare.com/v1/models
+[+] CLAUDE CODE STUDIO:   https://xxxx.trycloudflare.com/agent
+[+] PUBLIC BASE (OpenAI): https://xxxx.trycloudflare.com/v1
+[+] ADMIN DASHBOARD:      https://xxxx.trycloudflare.com/admin
+[+] MODELS:               https://xxxx.trycloudflare.com/v1/models
 ```
 
-Done. Use the `/v1` URL in any OpenAI client, and open `/admin` for the dashboard.
+Done. Use the `/v1` URL in any OpenAI client, open `/agent` for the Claude Code
+studio, and `/admin` for the dashboard.
+
+> **Want a URL that never changes?** Create a Cloudflare **named tunnel**
+> (Zero Trust -> Networks -> Tunnels) and pass its token:
+>
+> ```bash
+> curl -fsSL https://raw.githubusercontent.com/Silence-X-Proton/twinmind-api/main/vps-install.sh | TWINMIND_TUNNEL_TOKEN='<token>' bash
+> ```
+
+> Uninstall any time: `bash /opt/twinmind-api/vps-install.sh --uninstall`
 
 ---
 
@@ -81,9 +105,9 @@ curl -fsSL https://github.com/cloudflare/cloudflared/releases/latest/download/cl
 chmod +x /usr/local/bin/cloudflared
 
 # start quick tunnel (background)
-# IMPORTANT: --protocol http2 forces TCP:443. Colab (and many restricted
-# networks) block Cloudflare QUIC (UDP:7844) which is cloudflared's default,
-# causing the tunnel to silently never register -> no trycloudflare URL.
+# IMPORTANT: --protocol http2 forces TCP:443. Many restricted networks block
+# Cloudflare QUIC (UDP:7844), cloudflared's default, which makes the tunnel
+# silently never register -> no trycloudflare URL.
 nohup cloudflared tunnel --url http://localhost:8080 --protocol http2 --no-autoupdate > tunnel.log 2>&1 &
 sleep 12
 
@@ -224,21 +248,21 @@ tail -f ~/twinmind-api/tunnel.log
 
 ### Cloudflare Error 1033 / 404 on your URL ("No web page was found")
 
-**Cause:** a quick tunnel gets a **new random URL every time cloudflared restarts** (crash, network blip, Colab idle, or a manual re-run). Any previously saved link then points at a hostname with no tunnel behind it -> Cloudflare edge returns **1033 / 404**.
+**Cause:** a quick tunnel gets a **new random URL every time cloudflared restarts** (crash, network blip, a host reboot, or a manual re-run). Any previously saved link then points at a hostname with no tunnel behind it -> Cloudflare edge returns **1033 / 404**.
 
 **Fix:**
 1. Get the **current** live URL (never reuse an old one):
    ```bash
-   bash /content/twinmind-api/url.sh          # prints the current URL
+   bash /opt/twinmind-api/url.sh          # prints the current URL
    ```
    The admin **Overview → Live public link** card also always shows the current URL (auto-refreshes).
 2. Re-run the launcher: it is **idempotent**. If server **and tunnel** are healthy it reuses them (URL unchanged); if the tunnel has died it restarts the stack and prints a fresh URL:
    ```bash
-   !curl -fsSL https://raw.githubusercontent.com/Silence-X-Proton/twinmind-api/main/colab.sh | bash
+   curl -fsSL https://raw.githubusercontent.com/Silence-X-Proton/twinmind-api/main/vps-install.sh | bash
    ```
 3. **Want a URL that never changes?** Use a Cloudflare **named tunnel**:
    ```bash
-   !TWINMIND_TUNNEL_TOKEN='<your-cloudflare-tunnel-token>' bash /content/twinmind-api/colab.sh
+   TWINMIND_TUNNEL_TOKEN='<your-cloudflare-tunnel-token>' bash /opt/twinmind-api/vps-install.sh
    ```
    (Cloudflare Zero Trust → Networks → Tunnels → create → copy the connector token.) Stable URL across restarts.
 
@@ -252,9 +276,9 @@ sleep 12 && grep -oE 'https://[a-z0-9-]+\.trycloudflare.com' tunnel.log | head -
 
 ---
 
-## 🏠 Persistent hosting (NO more dead URLs on Colab)
+## 🏠 Persistent hosting
 
-Google Colab is **ephemeral**: it recycles the VM on idle timeout / quota, which kills the tunnel and makes your saved URL show Cloudflare **1033/404**. If that keeps happening, run TwinMind on a **persistent host** — the process stays up 24/7 and the URL stays alive.
+The VPS installer already configures 24/7 persistence (systemd services, or a self-healing watchdog + `@reboot` cron). For container platforms you can also deploy the Docker image — the process stays up and the URL stays alive.
 
 ### Option A — Render (free tier, one-click)
 
@@ -342,13 +366,14 @@ Then open `https://YOUR-URL/admin?key=your-secret` (it is stored in the browser 
 
 ## 🔁 Continuous running + Destroy
 
-The Colab launcher runs a **watchdog**: if the API or the tunnel ever dies, it
-automatically restarts them. So it keeps running continuously — no manual restart.
+The VPS installer runs a **watchdog** (or systemd services): if the API or the
+tunnel ever dies, it automatically restarts them. So it keeps running
+continuously — no manual restart, and it survives reboots.
 
 It stops **only** when:
 - you press **Destroy gateway** in the admin **Health** tab (asks you **4 times**;
   burns all accounts, kills the tunnel + server), or
-- the host / Colab session ends (Colab idle limit).
+- you stop the services / run the uninstaller.
 
 ## ❗ Notes
 
@@ -477,22 +502,43 @@ Claude Code CLI  -->  /anthropic/v1/messages  -->  TwinMind (api2.twinmind.com)
    (agent loop)          (bridge: tool emulation)         models
 ```
 
-- Default bridge model: `claude-sonnet-5` (most reliable at tool calls).
+### How the bridge gets 0% refusals
+
+TwinMind runs its own "companion" persona server-side and **refuses** shell or
+coding tool use when the request says *"you are a coding agent"* (measured
+~40-60% refusals). The bridge avoids that identity conflict entirely: it renders
+every request as a neutral **JSON action** task instead.
+
+```
+You are a strict JSON action generator. Output ONLY one JSON object, no prose.
+Format: {"name": "TOOL", "input": {...}}
+Example: {"name": "Bash", "input": {"command": "ls -la"}}
+Available TOOLs: Bash (input: command), Read (input: file_path), ...
+
+User: list the files here
+Assistant action:
+```
+
+The model's JSON object is re-emitted as a real Anthropic `tool_use` block, so
+Claude Code runs its full agent loop on TwinMind models.
+
+**Verified:** 10/10 tool calls, **0 refusals**, across repeated real
+Claude Code requests (`claude-opus-5-thinking`). The caller's Claude Code system
+prompt is dropped (it re-triggers the persona); JSON framing alone is enough.
+
+- Default bridge model: `claude-opus-5-thinking` (ties for best; `claude-sonnet-5`
+  is equally reliable and faster).
 - Override with `TWINMIND_AGENT_MODEL` (e.g. `gemini-3.7-flash`).
 - Add a real key (`ANTHROPIC_API_KEY`) or an Anthropic-compatible provider and
 the bridge is bypassed automatically.
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `TWINMIND_AGENT_MODEL` | `claude-sonnet-5` | TwinMind model the bridge uses |
-| `TWINMIND_BRIDGE_RETRIES` | `7` | retries when TwinMind refuses tool use |
+| `TWINMIND_AGENT_MODEL` | `claude-opus-5-thinking` | TwinMind model the bridge uses |
+| `TWINMIND_BRIDGE_RETRIES` | `3` | safety retries if a rare refusal slips through |
 | `TWINMIND_BRIDGE_URL` | `http://127.0.0.1:<port>/anthropic` | bridge base URL |
-| `TWINMIND_BRIDGE_SYSTEM_BUDGET` | `1800` | max system-prompt chars kept |
+| `TWINMIND_BRIDGE_SYSTEM_BUDGET` | `0` | max system-prompt chars kept (0 = drop it) |
 | `TWINMIND_BRIDGE_DEBUG` | (off) | dump the last bridge request to `/tmp` |
-
-> TwinMind runs its own companion persona and refuses coding/tool use on some
-> attempts; the bridge retries with a minimal prompt until a tool call comes
-> back (measured ~60% per attempt, ~99.9% within 7 attempts).
 
 ### Fully automatic start - one command
 
@@ -502,8 +548,8 @@ the bridge is bypassed automatically.
 
 `run.sh` does everything: creates the venv, installs requirements, installs
 Node.js + Claude Code CLI if missing, and starts the server. No manual `pip`,
-`npm`, `export` or key steps. Colab (`colab.sh`) and the VPS installer
-(`vps-install.sh`) do the same automatically.
+`npm`, `export` or key steps. The VPS installer (`vps-install.sh`) does the same
+automatically.
 
 ### Mobile UI + workspace button
 

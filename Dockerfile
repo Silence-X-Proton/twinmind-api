@@ -1,9 +1,8 @@
 # TwinMind Gateway — container image for persistent hosts
 # (Render, Fly.io, Railway, Koyeb, a VPS, Docker, etc.)
 #
-# Why: Google Colab is EPHEMERAL — it recycles the VM (idle timeout / quota),
-# which kills the tunnel and makes the saved URL show Cloudflare 1033/404.
-# On a persistent host the process stays up and the URL stays alive.
+# Why: on a persistent host the process stays up 24/7 and the public URL stays
+# alive (ephemeral notebook VMs recycle and kill the tunnel -> dead URLs).
 FROM python:3.11-slim
 
 ENV PYTHONUNBUFFERED=1 \

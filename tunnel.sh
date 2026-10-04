@@ -6,13 +6,13 @@
 #   ./tunnel.sh token <TUNNEL_TOKEN>  -> named tunnel via token (dashboard-managed)
 #   ./tunnel.sh install               -> install cloudflared if missing
 #
-# NOTE: Colab / most restricted networks block Cloudflare's QUIC (UDP:7844).
-#       We force --protocol http2 (TCP:443) which works everywhere Colab does.
+# NOTE: Many restricted networks block Cloudflare's QUIC (UDP:7844).
+#       We force --protocol http2 (TCP:443), which works everywhere.
 set -euo pipefail
 cd "$(dirname "$0")"
 
 PORT="${TWINMIND_PORT:-8080}"
-# Protocol to use for the tunnel edge connection. http2 = TCP, works on Colab.
+# Protocol to use for the tunnel edge connection. http2 = TCP, always works.
 PROTO="${TWINMIND_TUNNEL_PROTOCOL:-http2}"
 
 install_cf() {

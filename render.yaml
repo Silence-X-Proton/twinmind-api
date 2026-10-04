@@ -1,5 +1,5 @@
 # Render.com blueprint — ONE-CLICK persistent hosting (free tier available).
-# Why: Google Colab recycles its VM (idle/quota) and kills the tunnel, so the
+# Why: ephemeral notebook VMs recycle (idle/quota) and kill the tunnel, so the
 # saved URL shows Cloudflare 1033/404. Render keeps the service running 24/7.
 #
 # Usage: push repo to GitHub -> Render -> New -> Blueprint -> pick this repo.
