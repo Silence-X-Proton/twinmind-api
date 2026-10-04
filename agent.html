@@ -1,0 +1,623 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#080a0d">
+<title>TwinMind Agent · Claude Code Studio</title>
+<style>
+  :root{
+    --bg:#080a0d; --panel:#14181e; --panel2:#0f1318;
+    --silver:#c9d0da; --silver-hi:#f2f5fa; --silver-lo:#8b93a1; --mut:#6d7684;
+    --line:rgba(201,208,218,.12); --line-hi:rgba(242,245,250,.22); --ink:#e9edf3;
+    --ok:#9fd8b4; --okbg:rgba(120,200,150,.14); --bad:#e6a2a2; --badbg:rgba(210,110,110,.14);
+    --warn:#e6cf9a; --accent:#c8b6ff;
+    --metal:linear-gradient(180deg,#20252d 0%,#151922 45%,#10131a 100%);
+    --shadow:0 10px 30px -12px rgba(0,0,0,.75), inset 0 1px 0 rgba(255,255,255,.06);
+    --silver-grad:linear-gradient(180deg,#ffffff 0%,#d7dde6 40%,#9aa2b1 100%);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  body{
+    background:radial-gradient(1200px 600px at 50% -10%, #171c24 0%, rgba(23,28,36,0) 60%),
+      linear-gradient(180deg,#0a0d11 0%,#080a0d 40%,#0a0c10 100%);
+    color:var(--ink);font:15px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    -webkit-text-size-adjust:100%;overflow:hidden;
+  }
+  button,input,textarea,select{font:inherit;color:inherit}
+  a{color:var(--silver-hi)}
+  .app{display:flex;height:100vh;height:100dvh}
+  /* ---------- sidebar ---------- */
+  .side{width:270px;flex:0 0 270px;border-right:1px solid var(--line);background:var(--panel2);
+    display:flex;flex-direction:column;transition:margin-left .2s}
+  .side.hidden{margin-left:-270px}
+  .side .brand{padding:14px 14px 10px;display:flex;align-items:center;gap:9px;border-bottom:1px solid var(--line)}
+  .brand .dot{width:9px;height:9px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#fff,#8f98a6);box-shadow:0 0 10px rgba(220,230,245,.5)}
+  .brand b{font-size:14px;letter-spacing:.5px;background:var(--silver-grad);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+  .side .pad{padding:10px}
+  .btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;cursor:pointer;
+    padding:9px 13px;border-radius:11px;border:1px solid var(--line-hi);
+    background:linear-gradient(180deg,#232935,#151a22);color:var(--silver-hi);
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.07);transition:filter .15s,transform .05s}
+  .btn:hover{filter:brightness(1.16)} .btn:active{transform:translateY(1px)}
+  .btn.primary{background:linear-gradient(180deg,#3a4257,#232a38);border-color:rgba(200,182,255,.35)}
+  .btn.ghost{background:transparent;border-color:var(--line)}
+  .btn.sm{padding:6px 10px;border-radius:9px;font-size:13px}
+  .btn.danger{color:var(--bad);border-color:rgba(210,110,110,.35)}
+  .btn.wide{width:100%}
+  .search{margin:8px 10px;display:flex;gap:6px}
+  .search input{flex:1;background:#0b0e13;border:1px solid var(--line);border-radius:10px;padding:8px 10px}
+  .sess{flex:1;overflow-y:auto;padding:4px 8px 12px}
+  .sess .item{display:flex;gap:8px;align-items:center;padding:9px 10px;border-radius:10px;cursor:pointer;margin-bottom:3px;border:1px solid transparent}
+  .sess .item:hover{background:rgba(255,255,255,.04)}
+  .sess .item.active{background:linear-gradient(180deg,#1e2430,#151a22);border-color:var(--line-hi)}
+  .sess .item .t{flex:1;min-width:0}
+  .sess .item .t b{display:block;font-size:13.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .sess .item .t span{font-size:11px;color:var(--mut)}
+  .sess .item .x{opacity:0;font-size:15px;color:var(--mut);padding:2px 5px;border-radius:7px}
+  .sess .item:hover .x{opacity:1}
+  .sess .item .x:hover{color:var(--bad);background:rgba(210,110,110,.14)}
+  .side .foot{border-top:1px solid var(--line);padding:9px 10px;display:flex;gap:6px;flex-wrap:wrap}
+  /* ---------- main ---------- */
+  .main{flex:1;display:flex;flex-direction:column;min-width:0}
+  .top{display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--line);background:var(--metal)}
+  .top .grow{flex:1;min-width:0}
+  .top .title{font-size:14.5px;font-weight:650;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  select,input[type=text],input[type=password],input[type=url]{background:#0b0e13;border:1px solid var(--line);border-radius:10px;padding:8px 10px}
+  .pill{font-size:11px;font-weight:750;letter-spacing:.6px;padding:5px 10px;border-radius:999px;border:1px solid var(--line-hi);background:linear-gradient(180deg,#1e232b,#12161c)}
+  .pill.on{color:var(--ok);background:var(--okbg);border-color:rgba(120,200,150,.3)}
+  .pill.off{color:var(--bad);background:var(--badbg);border-color:rgba(210,110,110,.3)}
+  .chatarea{flex:1;display:flex;min-height:0}
+  .chat{flex:1;overflow-y:auto;padding:18px 16px 8px;min-width:0}
+  .msg{max-width:820px;margin:0 auto 16px;display:flex;gap:11px}
+  .msg .av{width:29px;height:29px;flex:0 0 29px;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:14px;
+    border:1px solid var(--line-hi);background:linear-gradient(180deg,#242a35,#141920)}
+  .msg .body{flex:1;min-width:0}
+  .msg .who{font-size:11.5px;color:var(--mut);margin-bottom:4px;letter-spacing:.4px;text-transform:uppercase;font-weight:700}
+  .msg .bubble{background:var(--panel);border:1px solid var(--line);border-radius:13px;padding:11px 13px;white-space:pre-wrap;word-wrap:break-word;overflow-wrap:anywhere}
+  .msg.user .bubble{background:linear-gradient(180deg,#1b2130,#141922);border-color:var(--line-hi)}
+  .msg pre{background:#0a0d12;border:1px solid var(--line);border-radius:10px;padding:10px;overflow-x:auto;margin:8px 0}
+  .msg code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:13px}
+  .msg :not(pre)>code{background:rgba(255,255,255,.07);padding:1px 5px;border-radius:6px}
+  .tools{margin:9px 0 0;display:flex;flex-direction:column;gap:7px}
+  .tool{border:1px solid var(--line);border-radius:11px;background:#0c1017;overflow:hidden}
+  .tool .th{display:flex;align-items:center;gap:8px;padding:8px 11px;cursor:pointer;background:linear-gradient(180deg,#181d26,#11151c);font-size:13px}
+  .tool .th .nm{font-weight:700;color:var(--accent)}
+  .tool .th .cl{padding:1px 6px;border-radius:6px;background:rgba(255,255,255,.07);font-size:11px;font-family:ui-monospace,monospace;color:var(--silver-lo);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}
+  .tool .tc{padding:9px 11px;display:none}
+  .tool.open .tc{display:block}
+  .tool pre{margin:0}
+  .cmdk{color:var(--warn)}
+  .empty{max-width:660px;margin:8vh auto;text-align:center;color:var(--silver-lo)}
+  .empty h2{font-size:26px;margin:0 0 8px;background:var(--silver-grad);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+  .chips{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin-top:18px}
+  .chip{cursor:pointer;padding:9px 13px;border-radius:11px;border:1px solid var(--line);background:var(--panel);font-size:13.5px}
+  .chip:hover{filter:brightness(1.15)}
+  .composer{border-top:1px solid var(--line);background:var(--panel2);padding:11px 14px 13px}
+  .composer .inner{max-width:820px;margin:0 auto}
+  .attachrow{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:7px}
+  .chipfile{display:inline-flex;align-items:center;gap:6px;font-size:12px;padding:4px 9px;border-radius:8px;background:rgba(200,182,255,.12);border:1px solid rgba(200,182,255,.3)}
+  .chipfile b{cursor:pointer;color:var(--mut)} .chipfile b:hover{color:var(--bad)}
+  .inputrow{display:flex;gap:9px;align-items:flex-end}
+  textarea#msg{flex:1;resize:none;min-height:48px;max-height:220px;background:#0b0e13;border:1px solid var(--line);border-radius:13px;padding:12px 13px;outline:none}
+  textarea#msg:focus{border-color:var(--line-hi)}
+  .send{width:46px;height:46px;border-radius:13px;flex:0 0 46px;font-size:18px}
+  .composer .hint{font-size:11px;color:var(--mut);margin-top:6px;display:flex;justify-content:space-between;gap:10px}
+  /* ---------- files drawer ---------- */
+  .drawer{width:330px;flex:0 0 330px;border-left:1px solid var(--line);background:var(--panel2);display:flex;flex-direction:column}
+  .drawer.hidden{display:none}
+  .drawer .dh{padding:11px 12px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:8px}
+  .drawer .dh b{flex:1;font-size:13.5px}
+  .files{overflow-y:auto;flex:1;padding:6px 6px 12px}
+  .fitem{display:flex;align-items:center;gap:7px;padding:6px 9px;border-radius:8px;cursor:pointer;font-size:13px}
+  .fitem:hover{background:rgba(255,255,255,.05)}
+  .fitem .p{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .fitem .s{font-size:10.5px;color:var(--mut)}
+  .fitem.dir{color:var(--silver-hi);font-weight:600}
+  .viewer{border-top:1px solid var(--line);display:none;flex-direction:column;max-height:52%}
+  .viewer.open{display:flex}
+  .viewer .vh{padding:8px 11px;display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--line);font-size:12.5px}
+  .viewer .vh .pn{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:ui-monospace,monospace}
+  .viewer textarea{width:100%;flex:1;background:#0a0d12;border:0;padding:10px;font-family:ui-monospace,monospace;font-size:12.5px;resize:none;min-height:180px;outline:none}
+  /* ---------- modals ---------- */
+  .modal{position:fixed;inset:0;background:rgba(4,6,9,.72);backdrop-filter:blur(3px);display:none;align-items:center;justify-content:center;padding:16px;z-index:50}
+  .modal.open{display:flex}
+  .card{width:100%;max-width:620px;max-height:88vh;overflow-y:auto;background:var(--metal);border:1px solid var(--line-hi);border-radius:16px;box-shadow:var(--shadow);padding:16px}
+  .card h3{margin:0 0 4px;font-size:17px}
+  .card .sub{color:var(--mut);font-size:12.5px;margin-bottom:13px}
+  .field{margin-bottom:11px}
+  .field label{display:block;font-size:12px;color:var(--silver-lo);margin-bottom:4px;letter-spacing:.3px}
+  .field input,.field select,.field textarea{width:100%}
+  .field textarea{background:#0b0e13;border:1px solid var(--line);border-radius:10px;padding:9px;min-height:70px;font-family:ui-monospace,monospace;font-size:13px}
+  .prow{border:1px solid var(--line);border-radius:11px;padding:10px;margin-bottom:8px;background:var(--panel2)}
+  .prow .pn{font-weight:700;display:flex;align-items:center;gap:8px}
+  .prow .pn small{color:var(--mut);font-weight:400}
+  .prow .pu{font-family:ui-monospace,monospace;font-size:11.5px;color:var(--silver-lo);word-break:break-all;margin-top:3px}
+  .prow .pm{font-family:ui-monospace,monospace;font-size:11.5px;color:var(--accent);margin-top:3px}
+  .prow .pa{margin-top:8px;display:flex;gap:6px}
+  .prow .tokens{font-family:ui-monospace,monospace;font-size:11.5px;color:var(--silver-lo);margin-top:3px}
+  .row{display:flex;gap:9px;flex-wrap:wrap}
+  .row>*{flex:1}
+  .warnbox{border:1px solid rgba(230,207,154,.3);background:rgba(230,207,154,.08);border-radius:10px;padding:9px 11px;font-size:12.5px;color:var(--warn);margin-bottom:11px}
+  .spin{display:inline-block;width:11px;height:11px;border:2px solid rgba(255,255,255,.25);border-top-color:#fff;border-radius:50%;animation:sp .7s linear infinite}
+  @keyframes sp{to{transform:rotate(360deg)}}
+  .toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:#1b212c;border:1px solid var(--line-hi);padding:10px 15px;border-radius:11px;font-size:13px;z-index:80;box-shadow:var(--shadow);display:none}
+  .toast.show{display:block}
+  .menu{position:relative}
+  .mbtn{cursor:pointer;padding:7px 11px;border-radius:10px;border:1px solid var(--line);background:#0b0e13;font-size:13px}
+  .mdd{position:absolute;right:0;top:calc(100% + 6px);min-width:190px;max-height:340px;overflow-y:auto;background:#12161d;border:1px solid var(--line-hi);border-radius:11px;box-shadow:var(--shadow);display:none;z-index:40;padding:5px}
+  .mdd.open{display:block}
+  .mdd .opt{padding:8px 10px;border-radius:8px;cursor:pointer;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .mdd .opt:hover{background:rgba(255,255,255,.06)}
+  .mdd .grp{padding:7px 10px 3px;font-size:10.5px;letter-spacing:.8px;text-transform:uppercase;color:var(--mut)}
+  .mdd .opt.sel{background:rgba(200,182,255,.14);color:#fff}
+  @media (max-width:900px){
+    .side{position:fixed;z-index:30;height:100%;margin-left:0;box-shadow:var(--shadow)}
+    .side.hidden{margin-left:-280px} .side{width:280px;flex-basis:280px}
+    .drawer{position:fixed;right:0;z-index:30;height:100%;box-shadow:var(--shadow)}
+    .drawer.hidden{display:none}
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <!-- SIDEBAR -->
+  <aside class="side" id="side">
+    <div class="brand"><span class="dot"></span><b>TwinMind Agent</b></div>
+    <div class="pad"><button class="btn primary wide" onclick="newSession()">+ New chat</button></div>
+    <div class="search">
+      <input id="qbox" type="text" placeholder="Search all chats…" onkeydown="if(event.key==='Enter')globalSearch()">
+      <button class="btn sm" onclick="globalSearch()" title="Search">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+      </button>
+    </div>
+    <div class="sess" id="sess"></div>
+    <div class="foot">
+      <button class="btn sm ghost" onclick="openProviders()">Providers</button>
+      <button class="btn sm ghost" onclick="openSettings()">Setup</button>
+      <a class="btn sm ghost" href="/admin" target="_blank" rel="noopener">Gateway</a>
+    </div>
+  </aside>
+
+  <!-- MAIN -->
+  <section class="main">
+    <div class="top">
+      <button class="btn sm ghost" onclick="toggleSide()" title="Menu">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
+      </button>
+      <div class="grow"><div class="title" id="title">New chat</div></div>
+      <span class="pill" id="ccpill" title="Claude Code CLI status">claude ?</span>
+      <div class="menu">
+        <div class="mbtn" onclick="toggleModelMenu(event)" id="modelbtn">auto ▾</div>
+        <div class="mdd" id="mdd"></div>
+      </div>
+      <button class="btn sm ghost" onclick="toggleFiles()" title="Workspace files">Files</button>
+    </div>
+
+    <div class="chatarea">
+      <div class="chat" id="chat">
+        <div class="empty" id="emptystate">
+          <h2>What are we building?</h2>
+          <div>Claude Code runs with full root in this session's workspace. Files it creates appear in the Files panel. No permission prompts, ever.</div>
+          <div class="chips">
+            <div class="chip" onclick="quick(this)">Build a Python script that scrapes Hacker News top stories and saves them to CSV</div>
+            <div class="chip" onclick="quick(this)">Create a full todo app with HTML, CSS and JS in a single file, then run it locally</div>
+            <div class="chip" onclick="quick(this)">Audit this system: list open ports, running services and disk usage</div>
+            <div class="chip" onclick="quick(this)">Write a README.md and a .gitignore for this workspace</div>
+          </div>
+        </div>
+      </div>
+      <aside class="drawer hidden" id="drawer">
+        <div class="dh">
+          <b>Workspace</b>
+          <button class="btn sm" onclick="refreshFiles()" title="Refresh">↻</button>
+          <button class="btn sm ghost" onclick="toggleFiles()">✕</button>
+        </div>
+        <div class="files" id="files"></div>
+        <div class="viewer" id="viewer">
+          <div class="vh">
+            <span class="pn" id="vpath"></span>
+            <button class="btn sm" onclick="saveViewer()">Save</button>
+          </div>
+          <textarea id="vbody" spellcheck="false"></textarea>
+        </div>
+      </aside>
+    </div>
+
+    <div class="composer">
+      <div class="inner">
+        <div class="attachrow" id="attachrow"></div>
+        <div class="inputrow">
+          <button class="btn" onclick="pickFiles()" title="Attach files">+</button>
+          <input type="file" id="fileinput" multiple style="display:none" onchange="doUpload(this.files);this.value=''">
+          <textarea id="msg" placeholder="Ask anything — Claude Code will run commands, read and write files here… (Enter to send, Shift+Enter for newline)" onkeydown="onKey(event)"></textarea>
+          <button class="btn primary send" id="sendbtn" onclick="send()" title="Send">↑</button>
+        </div>
+        <div class="hint"><span id="hintleft">Root access · no permission prompts · files saved per session</span><span id="hintright"></span></div>
+      </div>
+    </div>
+  </section>
+</div>
+
+<!-- PROVIDERS MODAL -->
+<div class="modal" id="provModal">
+  <div class="card">
+    <h3>Custom providers</h3>
+    <div class="sub">Any OpenAI-compatible or Anthropic-compatible endpoint: base URL + API key + models.</div>
+    <div id="provList"></div>
+    <div class="warnbox" id="provWarn" style="display:none"></div>
+    <h4 style="margin:14px 0 8px">Add provider</h4>
+    <div class="field"><label>Name</label><input id="pName" type="text" placeholder="e.g. OpenRouter"></div>
+    <div class="field"><label>Base URL</label><input id="pBase" type="text" placeholder="https://openrouter.ai/api/v1"></div>
+    <div class="field"><label>API key</label><input id="pKey" type="password" placeholder="sk-..."></div>
+    <div class="field"><label>Type</label><select id="pKind"><option value="openai">OpenAI-compatible (/chat/completions)</option><option value="anthropic">Anthropic-compatible (Claude Code /v1/messages)</option></select></div>
+    <div class="field"><label>Models (one per line)</label><textarea id="pModels" placeholder="model-id-1&#10;model-id-2"></textarea></div>
+    <div class="row"><button class="btn primary" onclick="addProvider()">Add provider</button><button class="btn ghost" onclick="closeModal('provModal')">Close</button></div>
+  </div>
+</div>
+
+<!-- SETUP MODAL -->
+<div class="modal" id="setupModal">
+  <div class="card">
+    <h3>Setup &amp; health</h3>
+    <div class="sub">How to light up Claude Code and the engines.</div>
+    <div id="setupBody"></div>
+    <div class="row" style="margin-top:12px"><button class="btn ghost" onclick="closeModal('setupModal')">Close</button></div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ------------------------------------------------------------------ state ---
+const S = { sid:null, sessions:[], messages:[], files:[], attachments:[], models:[], model:'auto',
+            providerId:'', engine:'claude', streaming:false, viewPath:null, status:{} };
+const $ = (id)=>document.getElementById(id);
+const esc = (s)=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+function toast(msg, ms=1900){ const t=$('toast'); t.textContent=msg; t.classList.add('show');
+  clearTimeout(t._t); t._t=setTimeout(()=>t.classList.remove('show'), ms); }
+
+// ------------------------------------------------------------------ api -----
+async function api(path, opts={}){
+  const r = await fetch(path, Object.assign({headers:{'Content-Type':'application/json'}}, opts));
+  if(!r.ok){ let d=''; try{d=await r.text();}catch(e){} throw new Error(r.status+' '+d.slice(0,300)); }
+  const ct = r.headers.get('content-type')||'';
+  return ct.includes('json') ? r.json() : r.text();
+}
+
+// ------------------------------------------------------------- sessions -----
+async function loadSessions(){
+  try{ const d = await api('/agent/api/sessions'); S.sessions = d.sessions||[]; renderSessions(); }
+  catch(e){ toast('Sessions: '+e.message); }
+}
+function renderSessions(){
+  const el = $('sess');
+  if(!S.sessions.length){ el.innerHTML = '<div style="padding:14px;color:var(--mut);font-size:13px">No chats yet.</div>'; return; }
+  el.innerHTML = S.sessions.map(s=>{
+    const active = s.id===S.sid ? ' active':'';
+    const when = s.updated ? new Date(s.updated*1000).toLocaleDateString([], {month:'short',day:'numeric'}) : '';
+    return `<div class="item${active}" onclick="openSession('${s.id}')">
+      <div class="t"><b>${esc(s.title||'New chat')}</b><span>${esc(s.engine||'claude')} · ${s.message_count||0} msg · ${when}</span></div>
+      <div class="x" onclick="event.stopPropagation();delSession('${s.id}')" title="Delete">✕</div></div>`;
+  }).join('');
+}
+async function newSession(){
+  try{
+    const s = await api('/agent/api/sessions', {method:'POST', body:JSON.stringify({engine:S.engine, model:S.model})});
+    S.sessions.unshift(s); S.sid = s.id; S.messages=[]; S.attachments=[]; S.files=[];
+    renderSessions(); renderMessages(); renderAttachments(); refreshFiles();
+    $('title').textContent = s.title||'New chat'; $('msg').focus();
+  }catch(e){ toast('New chat failed: '+e.message); }
+}
+async function openSession(id){
+  if(S.streaming){ toast('Wait for the current run to finish'); return; }
+  try{
+    const d = await api('/agent/api/sessions/'+id);
+    S.sid = id; S.messages = d.messages||[]; S.attachments=[];
+    S.engine = d.session.engine||'claude'; S.model = d.session.model||'auto';
+    S.providerId = d.session.provider_id||'';
+    $('title').textContent = d.session.title||'New chat';
+    $('modelbtn').textContent = (S.model||'default')+' ▾';
+    renderSessions(); renderMessages(); renderAttachments(); refreshFiles();
+  }catch(e){ toast('Open failed: '+e.message); }
+}
+async function delSession(id){
+  if(!confirm('Delete this chat and its workspace?')) return;
+  try{ await api('/agent/api/sessions/'+id, {method:'DELETE'});
+    if(S.sid===id){ S.sid=null; S.messages=[]; $('title').textContent='New chat'; renderMessages(); $('files').innerHTML=''; }
+    loadSessions(); toast('Deleted');
+  }catch(e){ toast('Delete failed: '+e.message); }
+}
+function toggleSide(){ $('side').classList.toggle('hidden'); }
+
+// ------------------------------------------------------------- messages -----
+function renderMessages(){
+  const c = $('chat');
+  if(!S.messages.length){ c.innerHTML=''; c.appendChild($('emptystate')||document.createElement('div'));
+    if(!$('emptystate')) c.innerHTML='<div class="empty"><h2>What are we building?</h2><div>Pick a chat or start a new one.</div></div>';
+    return; }
+  c.innerHTML = S.messages.map(m=>renderMessage(m)).join('');
+  c.scrollTop = c.scrollHeight;
+}
+function renderMessage(m){
+  const isUser = m.role==='user';
+  const av = isUser ? '🧑' : '✳️';
+  const who = isUser ? 'You' : (m.meta && m.meta.engine==='claude' ? 'Claude Code' : 'Assistant');
+  let tools = '';
+  const trace = (m.meta && m.meta.trace)||[];
+  if(trace.length) tools = '<div class="tools">'+trace.map(t=>renderTool(t)).join('')+'</div>';
+  return `<div class="msg ${isUser?'user':''}"><div class="av">${av}</div>
+    <div class="body"><div class="who">${who}${m.meta&&m.meta.is_error?' · <span style="color:var(--bad)">error</span>':''}</div>
+    <div class="bubble">${md(m.content||'')}</div>${tools}</div></div>`;
+}
+function renderTool(t){
+  const n = (t.name||t.type||'event');
+  if(t.type==='file') return `<div class="tool"><div class="th"><span class="nm">📄 ${esc(t.action||'file')}</span><span class="cl">${esc(t.path)}</span></div></div>`;
+  if(t.type==='tool_use'){
+    const inp = t.input||{}; let one = '';
+    if(inp.command) one = inp.command;
+    else if(inp.file_path) one = inp.file_path;
+    else if(inp.path) one = inp.path;
+    else if(inp.pattern) one = inp.pattern; else one = JSON.stringify(inp).slice(0,160);
+    return `<div class="tool" onclick="this.classList.toggle('open')"><div class="th"><span class="nm">${esc(n)}</span><span class="cl">${esc(one)}</span></div>
+      <div class="tc"><pre>${esc(JSON.stringify(inp,null,2))}</pre></div></div>`;
+  }
+  if(t.type==='tool_result')
+    return `<div class="tool" onclick="this.classList.toggle('open')"><div class="th"><span class="nm">↳ result</span><span class="cl">${t.is_error?'error':'ok'}</span></div>
+      <div class="tc"><pre>${esc(t.content||'')}</pre></div></div>`;
+  return '';
+}
+// tiny markdown renderer (code fences, inline code, bold, links)
+function md(s){
+  s = esc(s);
+  s = s.replace(/```(\w*)\n([\s\S]*?)```/g, (m,l,c)=>'<pre><code>'+c.replace(/\n$/,'')+'</code></pre>');
+  s = s.replace(/`([^`\n]+)`/g,'<code>$1</code>');
+  s = s.replace(/\*\*([^*\n]+)\*\*/g,'<strong>$1</strong>');
+  s = s.replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g,'<a href="$2" target="_blank" rel="noopener">$1</a>');
+  return s;
+}
+
+// ---------------------------------------------------------------- chat ------
+function onKey(e){ if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); send(); } }
+function quick(el){ $('msg').value = el.textContent; $('msg').focus(); }
+function autosize(){ const t=$('msg'); t.style.height='auto'; t.style.height=Math.min(t.scrollHeight,220)+'px'; }
+$('msg').addEventListener('input', autosize);
+
+async function send(){
+  if(S.streaming) return;
+  const text = $('msg').value.trim();
+  if(!text && !S.attachments.length) return;
+  if(!S.sid) await newSession();
+  if(!S.sid) return;
+  const userMsg = {role:'user', content:text, ts:Date.now()/1000, meta:{attachments:S.attachments.slice()}};
+  S.messages.push(userMsg); $('emptystate') && $('emptystate').remove();
+  $('msg').value=''; autosize();
+  const att = S.attachments.slice(); S.attachments=[]; renderAttachments();
+  renderMessages();
+
+  // live assistant placeholder
+  const c=$('chat'); const holder=document.createElement('div'); holder.className='msg';
+  holder.innerHTML='<div class="av">✳️</div><div class="body"><div class="who">Claude Code</div><div class="bubble" id="live"></div><div class="tools" id="livetools"></div></div>';
+  c.appendChild(holder); c.scrollTop=c.scrollHeight;
+  const live=$('live'), lt=$('livetools'); let buf='', toolsHtml='', trace=[];
+
+  S.streaming=true; $('sendbtn').innerHTML='<span class="spin"></span>'; $('sendbtn').disabled=true;
+  $('hintright').textContent='running…';
+  try{
+    const resp = await fetch(`/agent/api/sessions/${S.sid}/chat`, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({message:text, attachments:att, engine:S.engine, model:S.model, provider_id:S.providerId})
+    });
+    if(!resp.ok || !resp.body) throw new Error('HTTP '+resp.status);
+    const rd = resp.body.getReader(); const dec=new TextDecoder(); let acc='';
+    while(true){
+      const {value,done} = await rd.read(); if(done) break;
+      acc += dec.decode(value, {stream:true});
+      const parts = acc.split('\n\n'); acc = parts.pop();
+      for(const p of parts){
+        const line = p.trim(); if(!line.startsWith('data:')) continue;
+        let ev; try{ ev = JSON.parse(line.slice(5).trim()); }catch(e){ continue; }
+        handleEvent(ev, {live,lt, onText:(t)=>{buf+=t; live.innerHTML=md(buf);}, onTool:(t)=>{trace.push(t); lt.innerHTML=trace.map(renderTool).join('');}, c});
+      }
+    }
+  }catch(e){ live.innerHTML = md((buf?buf+'\n\n':'')+'⚠️ '+e.message); }
+  finally{
+    S.streaming=false; $('sendbtn').textContent='↑'; $('sendbtn').disabled=false; $('hintright').textContent='';
+    if(!buf) live.innerHTML = md('_(no text output)_');
+    await reloadCurrent();
+  }
+}
+function handleEvent(ev, ctx){
+  const t = ev.type;
+  if(t==='text') ctx.onText(ev.text||'');
+  else if(t==='thinking'){ /* keep quiet, or could show */ }
+  else if(t==='tool_use'||t==='tool_result'||t==='file') ctx.onTool(ev);
+  else if(t==='init'){ S.status.ccSession = ev.session_id; $('hintright').textContent='claude '+(ev.model||''); }
+  else if(t==='error'){ ctx.onText('\n⚠️ '+(ev.message||'error')+'\n'); }
+}
+async function reloadCurrent(){
+  if(!S.sid) return;
+  try{ const d = await api('/agent/api/sessions/'+S.sid); S.messages=d.messages||[]; renderMessages(); }
+  catch(e){}
+  loadSessions(); refreshFiles();
+}
+
+// ---------------------------------------------------------------- files -----
+function toggleFiles(){ $('drawer').classList.toggle('hidden'); if(!$('drawer').classList.contains('hidden')) refreshFiles(); }
+function pickFiles(){ $('fileinput').click(); }
+async function doUpload(files){
+  if(!S.sid) { await newSession(); }
+  if(!S.sid) return;
+  for(const f of files){
+    const fd = new FormData(); fd.append('file', f, f.name);
+    try{
+      const r = await fetch(`/agent/api/sessions/${S.sid}/upload`, {method:'POST', body:fd});
+      const d = await r.json();
+      if(d.path){ S.attachments.push(d.path); }
+    }catch(e){ toast('Upload failed: '+e.message); }
+  }
+  renderAttachments(); refreshFiles();
+}
+function renderAttachments(){
+  $('attachrow').innerHTML = S.attachments.map((p,i)=>`<span class="chipfile">📎 ${esc(p.split('/').pop())}<b onclick="S.attachments.splice(${i},1);renderAttachments()">✕</b></span>`).join('');
+}
+async function refreshFiles(){
+  if(!S.sid) return;
+  try{ const d = await api(`/agent/api/sessions/${S.sid}/files`); S.files = d.files||[]; renderFiles(); }
+  catch(e){}
+}
+function renderFiles(){
+  const el=$('files');
+  if(!S.files.length){ el.innerHTML='<div style="padding:14px;color:var(--mut);font-size:12.5px">Workspace empty. Files Claude creates will show up here.</div>'; return; }
+  el.innerHTML = S.files.map(f=>{
+    const ic = f.is_dir ? '📁' : icon(f.path);
+    const sz = f.is_dir ? '' : fmtSize(f.size);
+    return `<div class="fitem${f.is_dir?' dir':''}" onclick="${f.is_dir?'':`openFile('${f.path.replace(/'/g,"\\'")}')`}">
+      <span>${ic}</span><span class="p">${esc(f.path)}</span><span class="s">${sz}</span></div>`;
+  }).join('');
+}
+function icon(p){ const e=(p.split('.').pop()||'').toLowerCase();
+  if(['py','js','ts','go','rs','java','c','cpp','sh'].includes(e)) return '🧩';
+  if(['html','css','json','yaml','yml','toml','xml'].includes(e)) return '🌐';
+  if(['md','txt','log','csv'].includes(e)) return '📄';
+  if(['png','jpg','jpeg','gif','webp','svg'].includes(e)) return '🖼️'; return '📄'; }
+function fmtSize(n){ return n>1048576? (n/1048576).toFixed(1)+'M' : n>1024? (n/1024).toFixed(1)+'K' : n+'B'; }
+async function openFile(path){
+  try{ const d = await api(`/agent/api/sessions/${S.sid}/file?path=${encodeURIComponent(path)}`);
+    S.viewPath=path; $('vpath').textContent=path; $('vbody').value=d.content||'';
+    $('viewer').classList.add('open');
+  }catch(e){ toast('Open failed: '+e.message); }
+}
+async function saveViewer(){
+  if(!S.viewPath) return;
+  try{ await api(`/agent/api/sessions/${S.sid}/file`, {method:'POST', body:JSON.stringify({path:S.viewPath, content:$('vbody').value})});
+    toast('Saved '+S.viewPath); refreshFiles();
+  }catch(e){ toast('Save failed: '+e.message); }
+}
+
+// ---------------------------------------------------------------- search ----
+async function globalSearch(){
+  const q = $('qbox').value.trim();
+  if(!q){ loadSessions(); return; }
+  try{
+    const d = await api('/agent/api/search?q='+encodeURIComponent(q));
+    const el=$('sess');
+    if(!d.results.length){ el.innerHTML='<div style="padding:14px;color:var(--mut);font-size:13px">No matches for “'+esc(q)+'”.</div>'; return; }
+    el.innerHTML = d.results.map(r=>`<div class="item" onclick="openSession('${r.session.id}')"><div class="t"><b>${esc(r.session.title)}</b>
+      <span>${r.messages.length} msg · ${r.files.length} file match</span></div></div>`).join('');
+  }catch(e){ toast('Search failed: '+e.message); }
+}
+
+// --------------------------------------------------------------- models -----
+function toggleModelMenu(ev){ ev.stopPropagation(); $('mdd').classList.toggle('open'); }
+document.addEventListener('click',()=>$('mdd').classList.remove('open'));
+$('mdd').addEventListener('click',e=>e.stopPropagation());
+function applyChoice(engine, model, provId, label){
+  S.engine = engine || 'claude';
+  S.model = model || (engine==='claude' ? 'default' : 'auto');
+  S.providerId = provId || '';
+  $('modelbtn').textContent = (label || S.model) + ' ▾';
+  $('mdd').classList.remove('open');
+  $('hintleft').textContent = (S.engine==='claude'
+      ? 'Claude Code · full root · no permission prompts · files saved per session'
+      : 'Chat engine · OpenAI-compatible endpoint');
+  if(S.sid) api('/agent/api/sessions/'+S.sid, {method:'PATCH',
+      body:JSON.stringify({model:S.model, engine:S.engine, provider_id:S.providerId})}).catch(()=>{});
+}
+function pickModel(id, group, provId, kind){
+  // Custom provider: anthropic kind drives Claude Code; openai kind drives the chat engine.
+  if(provId){ applyChoice(kind==='anthropic'?'claude':'openai', id, provId, id); return; }
+  // TwinMind gateway models are OpenAI-compatible through /v1.
+  if(group==='TwinMind'){ applyChoice('openai', id, '', id); return; }
+  applyChoice('claude', id, '', id);
+}
+function pickEngine(e){
+  if(e==='claude') applyChoice('claude', 'default', '', 'Claude Code');
+  else applyChoice('openai', 'auto', '', 'auto');
+}
+async function loadModels(){
+  try{
+    const d = await api('/agent/api/models'); S.models = d.models||[];
+    const groups = {};
+    for(const m of S.models){ (groups[m.group]=groups[m.group]||[]).push(m); }
+    let html='<div class="grp">Agent engine</div>';
+    html += `<div class="opt" onclick="pickEngine('claude')">✳️ Claude Code &mdash; shell, files, root</div>`;
+    html += `<div class="grp">Claude Code models</div>`;
+    html += `<div class="opt" onclick="applyChoice('claude','default','','default')">default (CLI choice)</div>`;
+    for(const a of ['opus','sonnet','haiku'])
+      html += `<div class="opt" onclick="applyChoice('claude','${a}','','${a}')">${a}</div>`;
+    html += `<div class="grp">Chat only (OpenAI-compatible)</div>`;
+    html += `<div class="opt" onclick="applyChoice('openai','auto','','auto')">auto (TwinMind)</div>`;
+    for(const g of Object.keys(groups)){
+      html += `<div class="grp">${esc(g)}</div>`;
+      for(const m of groups[g])
+        html += `<div class="opt" onclick="pickModel('${esc(m.id)}','${esc(g)}','${esc(m.provider_id||'')}','${esc(m.kind||'')}')">${esc(m.id)}</div>`;
+    }
+    $('mdd').innerHTML = html;
+  }catch(e){ toast('Models: '+e.message); }
+}
+
+// ------------------------------------------------------------- providers ----
+async function openProviders(){ $('provModal').classList.add('open'); await loadProviders(); await checkStatus(); }
+function closeModal(id){ $(id).classList.remove('open'); }
+async function loadProviders(){
+  try{
+    const d = await api('/agent/api/providers'); const el=$('provList');
+    if(!d.providers.length){ el.innerHTML='<div style="color:var(--mut);font-size:13px">No custom providers yet.</div>'; return; }
+    el.innerHTML = d.providers.map(p=>`<div class="prow">
+      <div class="pn">${esc(p.name)} <small>${esc(p.kind)}</small></div>
+      <div class="pu">${esc(p.base_url)}</div>
+      <div class="pm">models: ${esc((p.models||[]).join(', ')||'—')}</div>
+      <div class="tokens">key: ${esc(p.api_key_masked||'—')}</div>
+      <div class="pa"><button class="btn sm danger" onclick="delProvider('${p.id}')">Delete</button></div></div>`).join('');
+  }catch(e){ toast('Providers: '+e.message); }
+}
+async function addProvider(){
+  const body = {name:$('pName').value.trim(), base_url:$('pBase').value.trim(), api_key:$('pKey').value.trim(),
+                kind:$('pKind').value, models:$('pModels').value};
+  if(!body.base_url){ toast('Base URL required'); return; }
+  try{ await api('/agent/api/providers', {method:'POST', body:JSON.stringify(body)});
+    $('pName').value=$('pBase').value=$('pKey').value=$('pModels').value='';
+    toast('Provider added'); await loadProviders(); await loadModels();
+  }catch(e){ toast('Add failed: '+e.message); }
+}
+async function delProvider(id){
+  if(!confirm('Delete this provider?')) return;
+  try{ await api('/agent/api/providers/'+id, {method:'DELETE'}); await loadProviders(); await loadModels(); toast('Deleted'); }
+  catch(e){ toast('Delete failed: '+e.message); }
+}
+
+// --------------------------------------------------------------- status -----
+async function checkStatus(){
+  try{
+    const d = await api('/agent/api/status'); S.status = d;
+    const p=$('ccpill');
+    if(d.claude_installed){ p.textContent='claude ✓'; p.className='pill on'; }
+    else { p.textContent='claude ✗'; p.className='pill off'; }
+  }catch(e){ $('ccpill').textContent='claude ?'; $('ccpill').className='pill'; }
+}
+async function openSettings(){ $('setupModal').classList.add('open'); await checkStatus(); renderSetup(); }
+function renderSetup(){
+  const d = S.status||{};
+  let html='';
+  if(!d.claude_installed)
+    html += `<div class="warnbox">Claude Code CLI not found. Install it: <code>npm install -g @anthropic-ai/claude-code</code></div>`;
+  html += `<div class="field"><label>Claude Code CLI</label><div class="tokens">${d.claude_installed?'installed ✓ ('+esc(d.claude_bin||'claude')+')':'missing ✗'}</div></div>`;
+  html += `<div class="field"><label>Anthropic API key in server env</label><div class="tokens">${d.anthropic_key_present?'present ✓':'missing — set ANTHROPIC_API_KEY or add an Anthropic-compatible provider'}</div></div>`;
+  html += `<div class="field"><label>TwinMind gateway base</label><div class="tokens">${esc(d.gateway_base||'')}</div></div>`;
+  html += `<div class="field"><label>Custom providers</label><div class="tokens">${d.providers||0} configured</div></div>`;
+  html += `<div style="color:var(--mut);font-size:12.5px;margin-top:6px">Tip: to use a custom Anthropic-compatible endpoint (e.g. OpenRouter in Anthropic mode, or a proxy), add it under <b>Providers</b> and select it in the model menu.</div>`;
+  $('setupBody').innerHTML = html;
+}
+
+// ------------------------------------------------------------------ boot ----
+(async function(){
+  await checkStatus(); await loadSessions(); await loadModels();
+  autosize();
+  // open most recent session if any
+  if(S.sessions.length) openSession(S.sessions[0].id);
+})();
+</script>
+</body>
+</html>

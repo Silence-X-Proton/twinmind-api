@@ -366,3 +366,98 @@ It stops **only** when:
 
 For authorized testing and personal use. You are responsible for complying with
 all applicable terms and laws in your environment.
+
+---
+
+## 🧑‍💻 Claude Code Studio (agent UI) — `/agent`
+
+A Claude-Code style web UI that runs the **real Claude Code CLI** on the host with
+**full root access and no permission prompts**, plus a normal OpenAI-compatible
+chat engine and your own custom providers.
+
+Open **`/agent`** (e.g. `http://127.0.0.1:8080/agent`, or your public URL + `/agent`).
+
+### What it does
+
+| Feature | Detail |
+|---|---|
+| **Claude Code engine** | Drives the real `claude` CLI headless (`-p --output-format stream-json`). Full shell, file read/write, search, web — **no permission prompts** (`IS_SANDBOX=1` + `--dangerously-skip-permissions`, works as root). |
+| **Live tool trace** | Every command Claude runs, every file it writes, and every tool result is streamed into the chat and shown inline. |
+| **Per-session workspace** | Each chat gets its own folder `data/workspaces/<sid>/`. Files the agent creates appear instantly in the **Files** panel. |
+| **File viewer / editor** | Open any workspace file, read it, edit and save it from the UI. |
+| **File upload** | Attach files to a message; they are saved in the session workspace and referenced for the agent. |
+| **Multiple sessions** | Unlimited chats, each with its own workspace, model, engine and a **resumable Claude Code session** (`--session-id` / `--resume`). |
+| **Search** | Full-text search across all chats and all workspace files. |
+| **Model selection** | Claude Code models (`default` / `opus` / `sonnet` / `haiku`), all TwinMind gateway models, and any custom provider model. |
+| **Custom providers** | Add any OpenAI-compatible (`/chat/completions`) or Anthropic-compatible (`/v1/messages`) endpoint: **base URL + API key + models**. Stored masked; keys never echoed back. |
+| **Autonomous mode** | Runs like an agent — it does **not** ask for command permission, across messages and sessions. |
+
+### 1. Install Claude Code (required for the Claude Code engine)
+
+```bash
+npm install -g @anthropic-ai/claude-code@latest
+claude --version     # prints e.g. 2.1.289 (Claude Code)
+```
+
+The UI's top bar shows `claude ✓` when the CLI is detected at `/agent/api/status`.
+
+### 2. Give Claude Code credentials
+
+Pick **one**:
+
+**A. Anthropic API key (simplest, works headless/root)**
+```bash
+export ANTHROPIC_API_KEY='sk-ant-...'
+```
+
+**B. Custom Anthropic-compatible endpoint** — add it in the UI under **Providers**
+(kind = *Anthropic-compatible*). The base URL + key are passed to the CLI as
+`ANTHROPIC_BASE_URL` / `ANTHROPIC_API_KEY` for that session only.
+
+**C. Existing Claude subscription login**
+```bash
+claude auth login --claudeai    # or --console for API billing
+```
+
+### 3. Use it
+
+- **+ New chat** → describe a task. Claude Code runs commands, creates files, and
+the workspace panel shows everything live.
+- **Model menu** → pick the engine (Claude Code vs chat-only), a Claude Code model
+  alias, a TwinMind model, or a custom provider model.
+- **Providers** → register base URL + API key + models for any other service.
+- **Setup** → health: CLI present, key present, gateway base, provider count.
+
+### Agent API (for automation)
+
+| Method | Path | Purpose |
+|---|---|---|
+| GET | `/agent/api/status` | CLI installed, key present, gateway base |
+| GET/POST | `/agent/api/sessions` | list / create chats |
+| GET/PATCH/DELETE | `/agent/api/sessions/{sid}` | fetch (with messages) / update / delete |
+| POST | `/agent/api/sessions/{sid}/chat` | **SSE** chat stream (engine + model + provider) |
+| GET | `/agent/api/sessions/{sid}/files` | workspace listing |
+| GET/POST/DELETE | `/agent/api/sessions/{sid}/file` | read / write / delete a file |
+| POST | `/agent/api/sessions/{sid}/upload` | multipart file upload |
+| GET | `/agent/api/sessions/{sid}/search?q=` | search one chat + files |
+| GET | `/agent/api/search?q=` | search all chats |
+| GET/POST | `/agent/api/providers` | list / add custom providers |
+| PATCH/DELETE | `/agent/api/providers/{id}` | update / remove |
+| GET | `/agent/api/models` | TwinMind gateway models + custom provider models |
+
+SSE event types: `start`, `init`, `text`, `thinking`, `tool_use`, `tool_result`,
+`file`, `result`, `error`, `done`.
+
+### New env vars
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `TWINMIND_CLAUDE_BIN` | `claude` | path to the Claude Code CLI |
+| `TWINMIND_DATA_DIR` | `./data` | sessions, workspaces, providers store |
+| `TWINMIND_MAX_UPLOAD` | `26214400` | max upload size (bytes, 25 MB) |
+| `ANTHROPIC_API_KEY` | (empty) | Claude Code credential (or use a provider) |
+| `ANTHROPIC_BASE_URL` | (empty) | override Claude Code endpoint |
+
+> Security: the agent runs with full root and no permission prompts **by design**, as
+> requested. Only expose `/agent` on hosts you control; set `TWINMIND_ADMIN_KEY` and/or
+> put it behind an authenticated reverse proxy if the URL is public.

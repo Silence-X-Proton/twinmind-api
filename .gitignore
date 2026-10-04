@@ -8,3 +8,5 @@ pool_state.json
 .tunnel.pid
 watchdog.log
 public_url.txt
+data/
+pool_state.json

@@ -163,6 +163,13 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="TwinMind OpenAI-Compatible API", version="3.0.0", lifespan=lifespan)
 
+# Claude-Code style agent studio (chat UI, sessions, workspace files, providers).
+try:
+    from cc_routes import router as agent_router
+    app.include_router(agent_router)
+except Exception as _agent_err:  # pragma: no cover
+    print(f"[warn] agent UI not mounted: {_agent_err}")
+
 
 # --------------------------------------------------------------------------- #
 # Helpers                                                                      #
