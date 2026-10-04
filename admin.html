@@ -9,136 +9,32 @@
 <script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/lib/xterm.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@xterm/addon-fit@0.10.0/lib/addon-fit.js"></script>
 <style>
-  :root{
-    --bg:#080a0d; --bg2:#0d1014;
-    --panel:#14181e; --panel2:#0f1318;
-    --silver:#c9d0da; --silver-hi:#f2f5fa; --silver-lo:#8b93a1; --mut:#6d7684;
-    --line:rgba(201,208,218,.12); --line-hi:rgba(242,245,250,.22);
-    --ink:#e9edf3;
-    --ok:#9fd8b4; --okbg:rgba(120,200,150,.14);
-    --bad:#e6a2a2; --badbg:rgba(210,110,110,.14);
-    --warn:#e6cf9a;
-    --metal:linear-gradient(180deg,#20252d 0%,#151922 45%,#10131a 100%);
-    --metal-hi:linear-gradient(180deg,#2b313b 0%,#1a1f27 100%);
-    --silver-grad:linear-gradient(180deg,#ffffff 0%,#d7dde6 40%,#9aa2b1 100%);
-    --shadow:0 10px 30px -12px rgba(0,0,0,.75), inset 0 1px 0 rgba(255,255,255,.06);
-  }
-  *{box-sizing:border-box}
-  html,body{margin:0;padding:0}
-  body{
-    background:
-      radial-gradient(1200px 600px at 50% -10%, #171c24 0%, rgba(23,28,36,0) 60%),
-      linear-gradient(180deg,#0a0d11 0%,#080a0d 40%,#0a0c10 100%);
-    color:var(--ink);
-    font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
-    -webkit-text-size-adjust:100%;
-    min-height:100vh;
-  }
-  a{color:var(--silver-hi)}
-  .wrap{max-width:1120px;margin:0 auto;padding:14px 14px 96px}
 
-  /* ---------- header ---------- */
-  header{
-    display:flex;align-items:center;justify-content:space-between;gap:12px;
-    padding:14px 16px;border-radius:16px;border:1px solid var(--line);
-    background:var(--metal);box-shadow:var(--shadow);
-    position:relative;overflow:hidden;
-  }
-  header::after{content:"";position:absolute;inset:0;background:linear-gradient(115deg,rgba(255,255,255,.06) 0%,rgba(255,255,255,0) 30%,rgba(255,255,255,0) 70%,rgba(255,255,255,.04) 100%);pointer-events:none}
-  header h1{margin:0;font-size:17px;letter-spacing:.6px;font-weight:700;
-    background:var(--silver-grad);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;
-    display:flex;align-items:center;gap:8px}
-  header h1 .dot{width:9px;height:9px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#fff,#8f98a6);box-shadow:0 0 10px rgba(220,230,245,.5)}
-  .gstate{
-    font-size:11px;font-weight:800;letter-spacing:1.2px;padding:6px 12px;border-radius:999px;
-    border:1px solid var(--line-hi);background:linear-gradient(180deg,#1e232b,#12161c);
-    color:var(--silver-hi);box-shadow:inset 0 1px 0 rgba(255,255,255,.08)
-  }
-  .gstate.on{color:var(--ok);background:var(--okbg);border-color:rgba(120,200,150,.3)}
-  .gstate.off{color:var(--bad);background:var(--badbg);border-color:rgba(210,110,110,.3)}
+:root{color-scheme:dark;--bg:#111313;--ink:#ecefe9;--line:#ffffff12;--line-hi:#ffffff26;--mut:#929b90;--silver-hi:#f0f4ed;--silver-lo:#a5b0a4;--ok:#b5d8a6;--bad:#e6a2a2}
+html,body{margin:0;padding:0;min-height:100%;width:100%}body{font:14px/1.6 system-ui,-apple-system,sans-serif;-webkit-text-size-adjust:100%}a{color:inherit}svg{display:block}button,input,textarea,select{font:inherit;color:inherit;box-sizing:border-box;border:1px solid var(--line);border-radius:10px;padding:10px 12px;outline:none}button{cursor:pointer;touch-action:manipulation}button:disabled{opacity:.45;cursor:wait}button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:2px solid #c5dcb2;outline-offset:3px}input,select,textarea{width:100%;min-width:0}textarea{min-height:120px;resize:vertical}.hide{display:none!important}.row{display:flex;flex-wrap:wrap;align-items:center;gap:10px}.grid{display:grid;margin:16px 0 0}.stat .k{color:var(--mut);text-transform:uppercase}.stat .v{margin-top:8px}.card h3{margin:0 0 14px}.console-header{display:flex;align-items:center;justify-content:space-between;gap:14px}.gstate{border:1px solid var(--line-hi);border-radius:20px;font-weight:600}.gstate.on{color:var(--ok);background:#b5d8a610;border-color:#b5d8a632}.gstate.off{color:var(--bad);background:#e6a2a210}.tblwrap{overflow-x:auto;overscroll-behavior:contain}table{width:100%;border-collapse:collapse}th,td{text-align:left;white-space:nowrap;border-bottom:1px solid var(--line)}th{color:var(--mut);text-transform:uppercase;letter-spacing:1px}.req{cursor:pointer}.req:hover{background:#ffffff04}.pill{font-size:10px;border-radius:12px;padding:3px 8px;border:1px solid var(--line)}.pill.ok{color:var(--ok)}.pill.err{color:var(--bad)}.mono{font:12px ui-monospace,monospace}pre{border:1px solid var(--line);border-radius:12px;padding:16px;max-height:440px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;font:12px/1.7 ui-monospace,monospace}.kv{display:flex;justify-content:space-between;gap:14px;padding:8px 0;border-bottom:1px solid var(--line)}.kv span{overflow-wrap:anywhere;min-width:0}.toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);z-index:80;border:1px solid var(--line-hi);border-radius:12px;padding:12px 16px;font-size:12px}.termbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px}.term-stat{font-size:11px;color:var(--mut)}.term-frame{border:1px solid var(--line-hi);border-radius:12px;background:#080d09;overflow:hidden}.term-top{padding:12px;display:flex;align-items:center;gap:6px;border-bottom:1px solid var(--line)}.term-top .b{width:7px;height:7px;border-radius:50%;background:#6b7866}.term-top .ttl{font:10px ui-monospace,monospace;margin-left:8px;color:var(--mut)}.xterm-box{padding:10px;min-height:340px}.term-placeholder{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:20px;min-height:300px;color:var(--mut)}button.r{color:var(--bad);border-color:#e6a2a235;background:#e6a2a209}.danger h3{color:var(--bad)}.chip{display:inline-block;padding:6px 10px;border:1px solid var(--line);border-radius:8px;margin:3px;font-size:11px}.chips{display:flex;flex-wrap:wrap}.status-dot{display:inline-block}button:hover{filter:brightness(1.12)}
+/* Console v2: permanent desktop rail, compact mobile navigation. */
+:root{--bg:#111313;--bg2:#191c1b;--panel:#191c1b;--panel2:#141716;--ink:#ecefe9;--silver:#ccd2c9;--silver-hi:#f0f4ed;--silver-lo:#a5b0a4;--mut:#929b90;--line:#ffffff12;--line-hi:#ffffff26;--ok:#b5d8a6;--okbg:#bddca514;--metal:none;--metal-hi:#ffffff09;--silver-grad:none;--shadow:none}
+*{box-sizing:border-box}body{background:#111313;color:var(--ink);font-size:14px}.wrap{max-width:none;margin:0;padding:0;display:flex;min-height:100dvh}
+.console-nav{position:fixed;inset:0 auto 0 0;width:236px;padding:28px 18px;background:#171a18;border-right:1px solid var(--line);display:flex;flex-direction:column;z-index:25}
+.console-brand{display:flex;align-items:center;gap:9px;text-decoration:none;font-size:18px;font-weight:700;letter-spacing:-.6px}.console-brand small{font-size:8px;letter-spacing:1px;color:var(--mut);margin-left:auto}.brandmark{width:28px;height:28px;display:grid;place-items:center;border-radius:9px;background:#c5dcb2;color:#182016;font-weight:900}
+.studio-link{display:flex;gap:10px;align-items:center;padding:13px 12px;border:1px solid #c5dcb238;border-radius:12px;text-decoration:none;margin-top:28px;background:#c5dcb20a;font-size:12px}.studio-link svg,.tab svg{width:18px;height:18px;flex-shrink:0}
+.nav-caption{font-size:9px;letter-spacing:1.8px;color:var(--mut);margin:28px 12px 10px}.tabs{position:static;padding:0;margin:0;display:flex;flex-direction:column;background:none;border:0;backdrop-filter:none;overflow:visible;gap:5px}
+.tab{display:flex;gap:12px;align-items:center;padding:12px;border:0;border-radius:10px;background:none;color:#a5b0a4;box-shadow:none;font-weight:500;font-size:13px;text-align:left;min-height:44px}.tab.active{background:#c5dcb213;color:#daebcf;box-shadow:none}.tab:hover{background:#ffffff06}.nav-note{margin-top:auto;font-size:11px;line-height:1.8;color:#adb5a6;padding:20px 8px 0}.nav-note small{color:var(--mut);font-size:10px}.status-dot{display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--ok);margin-right:5px}
+.console-main{margin-left:236px;padding:26px 40px 64px;width:calc(100% - 236px);max-width:1700px}.console-header{border:0;border-radius:0;background:none;box-shadow:none;padding:0 0 24px;overflow:visible}.console-header::after{display:none}.eyebrow{font-size:9px;color:#a7b19f;letter-spacing:2px;display:block}.console-header h1{font-size:26px;letter-spacing:-1px;margin:7px 0 0;background:none;-webkit-text-fill-color:var(--ink);font-weight:500}.header-actions{display:flex;gap:14px;align-items:center}#consoleSync{font-size:10px;color:var(--mut)}.gstate{font-size:10px;padding:6px 12px;box-shadow:none;background:none}
+.console-intro{display:flex;justify-content:space-between;gap:24px;align-items:center;padding:26px 0 30px;border-top:1px solid var(--line)}.console-intro[hidden]{display:none}.console-intro h2{font-size:clamp(26px,3.6vw,48px);font-weight:400;line-height:1.08;letter-spacing:-1.8px;margin:14px 0}.console-intro p{color:var(--mut);font-size:12px;max-width:380px}.launch-card{display:flex;flex-direction:column;gap:13px;min-width:230px;background:#c5dcb2;color:#1a2414;border-radius:20px;padding:28px;text-decoration:none}.launch-card span{font-size:9px;letter-spacing:1.4px}.launch-card strong{font-size:25px;letter-spacing:-1px;font-weight:500}.launch-card small{font-size:11px}
+.card,.stat{background:#191c1b;border:1px solid var(--line);box-shadow:none;border-radius:16px}.card{padding:22px;margin-top:16px}.card::before,.stat::before{display:none}.card h3{font-size:12px;letter-spacing:.2px;text-transform:none}.stat .v{font-size:27px;font-weight:500;color:#e4eddd;background:none;-webkit-text-fill-color:initial}.stat .k{font-size:9px;letter-spacing:1px}.grid{grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px}.stat{padding:20px}.row{gap:10px}button,input,textarea,select{background:#111513;box-shadow:none;min-height:42px}button{font-size:12px;font-weight:500;background:#ffffff06}button.g{background:#bdd6ac;color:#15200f;text-shadow:none}button.ghost{background:none}.tblwrap{max-width:100%}td,th{padding:14px 10px;font-size:12px}th{font-size:9px}pre{background:#101310;box-shadow:none}.muted{font-size:11px;line-height:1.7}.term-frame{box-shadow:none}.danger{border-color:#be77732c!important}.toast{background:#283127;max-width:calc(100vw - 24px)}
+@media(max-width:900px){.wrap{display:block}.console-nav{position:sticky;top:0;width:100%;padding:12px 12px 8px;gap:0;border-right:0;border-bottom:1px solid var(--line)}.console-brand{font-size:15px}.console-brand small{margin-right:120px}.studio-link{position:absolute;right:12px;top:11px;margin:0;padding:8px 10px;font-size:10px}.studio-link svg{width:14px}.nav-caption,.nav-note{display:none}.tabs{display:flex;flex-direction:row;overflow-x:auto;margin-top:14px;gap:5px;scrollbar-width:none}.tab{display:flex;flex-direction:column;gap:5px;font-size:9px;min-width:64px;min-height:56px;padding:8px 10px}.tab svg{width:17px;height:17px}.console-main{margin:0;width:100%;padding:22px 14px 40px}.console-header{padding-bottom:20px}.console-header h1{font-size:25px}.console-intro{align-items:stretch;flex-direction:column;padding:22px 0 8px}.console-intro h2{font-size:38px}.launch-card{min-width:0;padding:19px;gap:8px;border-radius:15px}.launch-card strong{font-size:21px}.card{padding:16px}.grid{grid-template-columns:repeat(2,minmax(0,1fr))}.stat{padding:16px}.stat .v{font-size:24px}input,textarea,select{font-size:16px}.header-actions{gap:8px}#consoleSync{display:none}.row{min-width:0}.row>*{max-width:100%}.console-brand small{display:none}.tblwrap table{min-width:450px}}
+@media(max-width:900px){#tunUrl{flex:1 1 100%!important;width:100%}.tabs{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:2px}.tab{min-width:0;padding:8px 2px;font-size:8px}}
 
-  /* ---------- tabs ---------- */
-  .tabs{display:flex;gap:6px;overflow-x:auto;padding:10px 2px;position:sticky;top:0;z-index:20;
-    background:linear-gradient(180deg,rgba(8,10,13,.96),rgba(8,10,13,.75));backdrop-filter:blur(8px);
-    border-bottom:1px solid var(--line);margin-bottom:4px}
-  .tabs::-webkit-scrollbar{display:none}
-  .tab{flex:none;padding:8px 15px;border-radius:10px;border:1px solid var(--line);
-    background:var(--metal);color:var(--silver-lo);font-weight:600;font-size:13.5px;white-space:nowrap;cursor:pointer;
-    box-shadow:inset 0 1px 0 rgba(255,255,255,.05);transition:.15s}
-  .tab:hover{color:var(--silver-hi);border-color:var(--line-hi)}
-  .tab.active{color:#0b0d10;background:var(--silver-grad);border-color:var(--line-hi);box-shadow:0 6px 18px -8px rgba(220,230,245,.5), inset 0 1px 0 #fff}
-
-  /* ---------- cards / stats ---------- */
-  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-top:12px}
-  .stat{background:var(--metal);border:1px solid var(--line);border-radius:14px;padding:14px 15px;box-shadow:var(--shadow);position:relative;overflow:hidden}
-  .stat::before{content:"";position:absolute;left:0;right:0;top:0;height:1px;background:linear-gradient(90deg,transparent,rgba(255,255,255,.25),transparent)}
-  .stat .k{color:var(--mut);font-size:11px;text-transform:uppercase;letter-spacing:.9px;font-weight:700}
-  .stat .v{font-size:23px;font-weight:800;margin-top:7px;word-break:break-all;
-    background:var(--silver-grad);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
-  .card{background:var(--metal);border:1px solid var(--line);border-radius:16px;padding:16px;margin-top:12px;box-shadow:var(--shadow);position:relative}
-  .card::before{content:"";position:absolute;left:0;right:0;top:0;height:1px;background:linear-gradient(90deg,transparent,rgba(255,255,255,.18),transparent);border-radius:16px 16px 0 0}
-  .card h3{margin:0 0 12px;font-size:14px;letter-spacing:.4px;color:var(--silver-hi);font-weight:700;text-transform:uppercase}
-  .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
-  input,textarea,button,select{font:inherit;color:var(--ink);background:linear-gradient(180deg,#0f1318,#0b0e13);border:1px solid var(--line);border-radius:10px;padding:10px 12px;outline:none;transition:.15s}
-  input:focus,textarea:focus,select:focus{border-color:var(--line-hi);box-shadow:0 0 0 3px rgba(200,210,225,.07)}
-  input,select,textarea{width:100%}
-  textarea{min-height:96px;resize:vertical}
-  button{background:var(--metal-hi);border-color:var(--line-hi);color:var(--silver-hi);font-weight:700;cursor:pointer;box-shadow:inset 0 1px 0 rgba(255,255,255,.08),0 6px 16px -10px rgba(0,0,0,.8)}
-  button:hover{border-color:var(--silver);color:#fff}
-  button:active{transform:translateY(1px)}
-  button.g{background:var(--silver-grad);border-color:var(--line-hi);color:#0b0d10;text-shadow:0 1px 0 rgba(255,255,255,.4)}
-  button.r{background:linear-gradient(180deg,#2a1518,#1b0f11);border-color:rgba(210,110,110,.35);color:var(--bad)}
-  button.ghost{background:linear-gradient(180deg,#12161c,#0d1014)}
-  button:disabled{opacity:.45;cursor:not-allowed}
-  table{width:100%;border-collapse:collapse;font-size:13px}
-  th,td{text-align:left;padding:9px 8px;border-bottom:1px solid var(--line);white-space:nowrap}
-  th{color:var(--mut);font-weight:700;font-size:10.5px;text-transform:uppercase;letter-spacing:.7px}
-  tr.req{cursor:pointer}
-  tr.req:hover{background:rgba(200,210,225,.045)}
-  .pill{font-size:10.5px;padding:3px 9px;border-radius:999px;border:1px solid var(--line);color:var(--silver-lo);font-weight:700}
-  .pill.ok{color:var(--ok);background:var(--okbg);border-color:rgba(120,200,150,.3)}
-  .pill.err{color:var(--bad);background:var(--badbg);border-color:rgba(210,110,110,.3)}
-  .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12.5px}
-  pre{background:#06080b;border:1px solid var(--line);border-radius:12px;padding:12px;overflow:auto;max-height:360px;white-space:pre-wrap;word-break:break-word;box-shadow:inset 0 2px 10px rgba(0,0,0,.6)}
-  .muted{color:var(--mut);font-size:12.5px}
-  .kv{display:flex;justify-content:space-between;gap:10px;padding:7px 0;border-bottom:1px dashed var(--line)}
-  .toast{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);background:var(--metal);border:1px solid var(--line-hi);border-radius:12px;padding:11px 16px;font-size:13px;z-index:60;box-shadow:0 14px 40px -14px rgba(0,0,0,.9), inset 0 1px 0 rgba(255,255,255,.07)}
-  .hide{display:none!important}
-  .tblwrap{overflow-x:auto;-webkit-overflow-scrolling:touch;border-radius:10px}
-  .chips{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
-  .chip{padding:6px 11px;border-radius:9px;background:linear-gradient(180deg,#12161c,#0d1014);border:1px solid var(--line);font-size:12px;cursor:pointer;color:var(--silver-lo);font-family:ui-monospace,monospace}
-  .chip:hover{border-color:var(--line-hi);color:var(--silver-hi)}
-
-  /* ---------- terminal ---------- */
-  .termbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px}
-  .term-stat{font-size:11.5px;letter-spacing:.5px;color:var(--mut);font-weight:700}
-  .term-frame{border:1px solid var(--line-hi);border-radius:12px;overflow:hidden;background:#05070a;box-shadow:inset 0 2px 18px rgba(0,0,0,.85),0 10px 30px -18px rgba(0,0,0,.9)}
-  .term-top{display:flex;align-items:center;gap:6px;padding:8px 12px;background:var(--metal);border-bottom:1px solid var(--line)}
-  .term-top .b{width:10px;height:10px;border-radius:50%;background:linear-gradient(180deg,#3a4049,#22262d);border:1px solid rgba(255,255,255,.08)}
-  .term-top .ttl{margin-left:8px;font-size:11px;letter-spacing:1px;color:var(--silver-lo);font-weight:700;text-transform:uppercase}
-  .xterm-box{padding:8px 10px;min-height:340px}
-  .term-placeholder{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;min-height:340px;color:var(--mut);text-align:center;padding:20px}
-  .danger{border-color:rgba(210,110,110,.3)!important}
-  .danger h3{color:var(--bad)!important}
-  @media(max-width:600px){ .stat .v{font-size:19px} header h1{font-size:15px} .wrap{padding:10px 10px 90px} }
 </style>
 </head>
 <body>
 <div class="wrap">
-  <header>
-    <h1><span class="dot"></span>TwinMind Gateway · Admin</h1>
-    <div id="gstate" class="gstate on">ON</div>
-  </header>
-
-  <div class="tabs">
-    <div class="tab active" data-t="overview">Overview</div>
-    <div class="tab" data-t="requests">Requests</div>
-    <div class="tab" data-t="summarize">Summarize</div>
-    <div class="tab" data-t="pool">Pool</div>
-    <div class="tab" data-t="terminal">Terminal</div>
-    <div class="tab" data-t="health">Health</div>
-  </div>
-
+  <aside class="console-nav"><a class="console-brand" href="/admin"><span class="brandmark">T</span> TwinMind <small>CONSOLE</small></a>
+    <a class="studio-link" href="/agent"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 4h16v12H8l-4 4z"/></svg><span>Open agent studio</span></a>
+    <div class="nav-caption">WORKSPACE</div><nav class="tabs" aria-label="Gateway navigation"><button type="button" class="tab active" data-t="overview"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3h7v7H3z M14 3h7v7h-7z M3 14h7v7H3z M14 14h7v7h-7z"/></svg><span>Overview</span></button><button type="button" class="tab" data-t="requests"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12h4l3-8 4 16 3-8h4"/></svg><span>Activity</span></button><button type="button" class="tab" data-t="summarize"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 4h14v16H5z M8 8h8 M8 12h8 M8 16h5"/></svg><span>Summarize</span></button><button type="button" class="tab" data-t="pool"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 4h16v6H4z M4 14h16v6H4z M7 7h.01 M7 17h.01"/></svg><span>Connections</span></button><button type="button" class="tab" data-t="terminal"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6l6 6-6 6 M13 18h7"/></svg><span>Terminal</span></button><button type="button" class="tab" data-t="health"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l9 4v5c0 5-9 9-9 9s-9-4-9-9V7z"/></svg><span>System</span></button></nav><div class="nav-note"><span class="status-dot"></span> Self-hosted workspace<br><small>Gateway &amp; agent tools, together.</small></div></aside>
+  <main class="console-main"><header class="console-header"><div><span class="eyebrow">TWINMIND / GATEWAY</span><h1 id="consoleTitle">Overview</h1></div><div class="header-actions"><span id="consoleSync">Connecting</span><div id="gstate" class="gstate">Checking</div></div></header>
+  <div class="console-intro"><div><span class="eyebrow">YOUR AI CONTROL ROOM</span><h2>One gateway.<br>Every conversation.</h2><p>Monitor requests, inspect usage, and keep your workspace connected.</p></div><a class="launch-card" href="/agent"><span>AGENT STUDIO</span><strong>Start building</strong><small>Chat, files &amp; live tool activity →</small></a></div>
   <!-- OVERVIEW -->
   <section id="t-overview">
     <div class="card">
@@ -147,10 +43,10 @@
         <span class="muted" id="tunState">checking…</span>
       </div>
       <div class="row" style="margin-top:8px">
-        <input id="tunUrl" class="mono" readonly placeholder="loading…" style="flex:1;min-width:220px">
+        <input id="tunUrl" class="mono" readonly placeholder="loading…" style="flex:1;min-width:0">
         <button class="ghost" id="tunCopy">Copy</button>
-        <button class="ghost" id="tunOpen">Open /admin</button>
-        <button class="ghost" id="tunRef">⟳</button>
+        <button class="ghost" id="tunOpen">Open dashboard</button>
+        <button class="ghost" id="tunRef" aria-label="Refresh public link">Refresh</button>
       </div>
       <p class="muted">Quick-tunnel URLs <b>change whenever the tunnel restarts</b> — an old link then shows Cloudflare <b>1033/404</b>. Always use the link shown here. For a link that never changes, launch with a named tunnel token (<code>TWINMIND_TUNNEL_TOKEN</code>).</p>
     </div>
@@ -173,7 +69,7 @@
   <!-- REQUESTS -->
   <section id="t-requests" class="hide">
     <div class="card">
-      <div class="row"><button class="ghost" id="refReq">⟳ Refresh</button><span class="muted" id="reqMsg"></span></div>
+      <div class="row"><button class="ghost" id="refReq">Refresh</button><span class="muted" id="reqMsg"></span></div>
       <div class="tblwrap"><table id="reqTbl">
         <thead><tr><th>Time</th><th>Model</th><th>In</th><th>Out</th><th>St</th><th>Type</th></tr></thead><tbody></tbody>
       </table></div>
@@ -237,8 +133,8 @@
     <div class="card">
       <h3>Ubuntu Terminal</h3>
       <div class="termbar">
-        <button class="g" id="termStart">▶ Start Ubuntu Terminal</button>
-        <button class="ghost" id="termKill" disabled>■ Kill Session</button>
+        <button class="g" id="termStart">Start terminal</button>
+        <button class="ghost" id="termKill" disabled>Stop terminal</button>
         <span class="term-stat" id="termStat">stopped</span>
         <span class="muted">full interactive shell — runs inside the host environment</span>
       </div>
@@ -259,14 +155,15 @@
     <div class="card">
       <h3>Health</h3>
       <pre id="healthOut" class="mono">loading…</pre>
-      <div class="row" style="margin-top:8px"><button class="ghost" id="refHealth">⟳ Refresh</button></div>
+      <div class="row" style="margin-top:8px"><button class="ghost" id="refHealth">Refresh</button></div>
     </div>
     <div class="card danger">
-      <h3>⚠ Danger zone</h3>
+      <h3>Danger zone</h3>
       <p class="muted">Destroy = gateway OFF, burn ALL accounts (deleted upstream), kill the tunnel and the server. This stops everything. You must confirm 4 times.</p>
       <button class="r" id="destroyBtn">Destroy gateway</button>
     </div>
   </section>
+</main>
 </div>
 
 <script>
@@ -299,6 +196,8 @@ qa('.tab').forEach(t=>t.onclick=()=>{
   qa('.tab').forEach(x=>x.classList.remove('active')); t.classList.add('active');
   ['overview','requests','detail','summarize','pool','terminal','health'].forEach(x=>q('#t-'+x).classList.add('hide'));
   q('#t-'+t.dataset.t).classList.remove('hide');
+  q('#consoleTitle').textContent=t.textContent.trim();
+  q('.console-intro').hidden=t.dataset.t!=='overview';
   if(t.dataset.t==='requests') loadRequests();
   if(t.dataset.t==='pool') loadPool();
   if(t.dataset.t==='health') loadHealth();
@@ -337,6 +236,7 @@ async function loadStats(){
   try{
     const d = await api('/stats');
     setGateway(d.gateway);
+    q('#consoleSync').textContent='Updated '+new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
     q('#gstate').title = 'req/account quota: '+d.req_per_account;
     const g = [
       ['Total requests', fmt(d.total_requests)],

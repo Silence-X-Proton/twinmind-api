@@ -30,6 +30,7 @@ on TwinMind models.
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import re
@@ -492,17 +493,35 @@ async def messages(request: Request):
     model = body.get("model") or AGENT_MODEL
     stream = bool(body.get("stream"))
 
-    try:
-        visible, calls, in_tok = await run_with_fallback(body, tm_model)
-    except Exception as e:
-        return JSONResponse({"type": "error", "error": {"type": "api_error",
-                             "message": str(e)}}, status_code=502)
-
     mid = _msg_id()
-    out_tok = _count_tokens(visible) + sum(_count_tokens(json.dumps(c["input"])) for c in calls)
-
     if stream:
         async def gen() -> AsyncGenerator[str, None]:
+            # Send response headers immediately and keep one provider call alive
+            # during slow generations. Pings are liveness, not fake text tokens.
+            pending = asyncio.create_task(run_with_fallback(body, tm_model))
+            deadline = asyncio.get_running_loop().time() + max(1, REQUEST_TIMEOUT)
+            try:
+                yield _sse("ping", {"type": "ping"})
+                while not pending.done():
+                    remaining = deadline - asyncio.get_running_loop().time()
+                    if remaining <= 0:
+                        raise TimeoutError("Provider generation deadline exceeded")
+                    ready, _ = await asyncio.wait({pending}, timeout=min(10, remaining))
+                    if not ready:
+                        yield _sse("ping", {"type": "ping"})
+                visible, calls, in_tok = pending.result()
+                if not visible and not calls:
+                    raise RuntimeError("Provider returned no content")
+            except Exception:
+                yield _sse("error", {"type": "error", "error": {
+                    "type": "api_error", "message": "Generation failed or timed out; retry the request."}})
+                return
+            finally:
+                if not pending.done():
+                    pending.cancel()
+                await asyncio.gather(pending, return_exceptions=True)
+            out_tok = _count_tokens(visible) + sum(_count_tokens(json.dumps(c["input"])) for c in calls)
+
             yield _sse("message_start", {"type": "message_start", "message": {
                 "id": mid, "type": "message", "role": "assistant", "model": model,
                 "content": [], "stop_reason": None, "stop_sequence": None,
@@ -534,6 +553,16 @@ async def messages(request: Request):
 
         return StreamingResponse(gen(), media_type="text/event-stream",
                                  headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
+    try:
+        visible, calls, in_tok = await asyncio.wait_for(
+            run_with_fallback(body, tm_model), timeout=max(1, REQUEST_TIMEOUT))
+        if not visible and not calls:
+            raise RuntimeError("Provider returned no content")
+    except Exception:
+        return JSONResponse({"type": "error", "error": {
+            "type": "api_error", "message": "Generation failed or timed out."}}, status_code=502)
+    out_tok = _count_tokens(visible) + sum(_count_tokens(json.dumps(c["input"])) for c in calls)
 
     content: list[dict] = []
     if visible:

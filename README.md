@@ -614,3 +614,25 @@ Unicode/CRLF frames, delayed responses, disconnects, malformed events, partial
 tool arguments, and token-limit endings. These tests establish transport
 behavior—not universal model availability, unlimited generation, zero refusal,
 or an end-to-end production latency guarantee.
+
+### Studio / Console refresh and live streaming checks
+
+Both interfaces now use replacement stylesheets rather than stacked legacy
+visual overrides. Studio has a conversation rail, a workspace drawer and a
+bottom model/composer toolbar. Console has desktop navigation and a six-item
+mobile navigation bar. Existing chats, files and API routes are preserved.
+
+The bridge now sends SSE pings before a slow generation finishes, cancels its
+pending task on disconnect, and reports empty output or deadline failures as
+errors. This improves connection liveness; it does not turn the buffered tool
+emulator into native token-by-token tool streaming.
+
+Live checks on 2026-10-04 (one bounded request per model, not a reliability guarantee):
+
+| Model | Characters | Words | Text chunks | First text | Completion |
+|---|---:|---:|---:|---:|---|
+| claude-sonnet-5 | 23,056 | 3,329 | 2,125 | 1.25s | stop + DONE + requested end marker |
+| gemini-3.7-flash | 26,583 | 3,558 | 201 | 5.99s | stop + DONE + requested end marker |
+
+No transport errors occurred in those two checks. Reported token usage is an
+estimate; model limits and future provider availability still apply.
