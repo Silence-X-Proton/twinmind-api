@@ -162,8 +162,28 @@ def _system_text(system: Any) -> str:
     return str(system or "")
 
 
-def _render_messages(messages: list[dict]) -> str:
-    """Render an Anthropic conversation as plain User/Assistant/Tool result lines."""
+MAX_CONVO_CHARS = int(os.environ.get("TWINMIND_BRIDGE_MAX_CONVO", "24000"))
+
+
+def _render_messages(messages: list[dict], _cap: bool = True) -> str:
+    """Render an Anthropic conversation as plain User/Assistant/Tool result lines.
+
+    Very long conversations make TwinMind stall or drift, so when the rendered
+    transcript exceeds MAX_CONVO_CHARS we keep the most recent turns and note the
+    truncation. This keeps long chats responsive.
+    """
+    if _cap and messages:
+        # Remove only complete old messages; preserve the latest turn intact.
+        kept = [messages[-1]]
+        size = len(_render_messages(kept, False))
+        for message in reversed(messages[:-1]):
+            length = len(_render_messages([message], False))
+            if size + length > MAX_CONVO_CHARS:
+                break
+            kept.insert(0, message)
+            size += length
+        prefix = "[earlier messages omitted]\n" if len(kept) < len(messages) else ""
+        return prefix + _render_messages(kept, False)
     lines: list[str] = []
     for m in messages or []:
         role = (m.get("role") or "user").lower()
@@ -191,7 +211,8 @@ def _render_messages(messages: list[dict]) -> str:
                 if isinstance(inner, list):
                     inner = "\n".join(x.get("text", "") for x in inner if isinstance(x, dict))
                 lines.append("Tool result: " + (inner or "").strip())
-    return "\n".join(lines)
+    text = "\n".join(lines)
+    return text
 
 
 def _count_tokens(text: str) -> int:
@@ -210,6 +231,12 @@ def build_prompt(body: dict) -> tuple[str, int]:
         sections.append(convo)
     query = "\n\n".join(s for s in sections if s) + "\n\nAssistant action:"
     return query, _count_tokens(query)
+
+
+def _chat_prompt(body: dict) -> str:
+    """Plain conversation prompt (no tool framing) for a guaranteed reply."""
+    convo = _render_messages(body.get("messages") or [])
+    return (convo or "User: Hello") + "\n\nAssistant:"
 
 
 def _minimal_prompt(body: dict) -> str:
@@ -404,10 +431,29 @@ async def run_with_fallback(body: dict, model_id: str = "") -> tuple[str, list[d
             raw = await run_twinmind(q, model_id)
         except Exception:
             continue
+        if os.environ.get("TWINMIND_BRIDGE_DEBUG"):
+            try:
+                with open("/tmp/bridge_raw.log", "a", encoding="utf-8") as _r:
+                    _r.write(f"model={model_id} len={len(raw or '')} :: {(raw or '')[:200]!r}\n")
+            except Exception:
+                pass
+        if not (raw or "").strip():
+            # empty upstream output -> try again instead of returning nothing
+            continue
         last_raw = raw
         visible, calls = extract_tool_calls(raw, allowed)
         if calls or not looks_like_refusal(raw):
             return visible, calls, _count_tokens(q)
+    # Everything refused or came back empty. Try once as a plain chat so the user
+    # always gets SOME answer (greetings, questions, stuck tool loops).
+    try:
+        raw = await run_twinmind(_chat_prompt(body), model_id)
+        if (raw or "").strip():
+            visible, calls = extract_tool_calls(raw, allowed)
+            if visible and not calls:
+                return visible, [], in_tok
+    except Exception:
+        pass
     visible, calls = extract_tool_calls(last_raw, allowed)
     return visible, calls, in_tok
 

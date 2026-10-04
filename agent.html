@@ -210,6 +210,32 @@
     .mdd{left:0;right:0;min-width:0;max-width:100%}
     .elapsed{margin-left:0}
   }
+/* Studio refresh: quiet surfaces, one composer toolbar, predictable touch areas. */
+:root{--bg:#212120;--panel:#292927;--panel2:#191918;--ink:#ece9e2;--silver-hi:#faf7ef;--silver-lo:#aaa69c;--mut:#939084;--line:#ffffff12;--line-hi:#ffffff24;--acc:#d9a581;--accbg:#d9a58112;--metal:none;--shadow:0 12px 36px #0003}
+body{background:var(--bg)}
+.btn,.iconbtn,.modelbtn,.sendbtn,.top,.bubble,.msg.user .bubble,.msg .av,.tool .th{background:none;box-shadow:none}
+.side{background:#191918;width:260px;flex-basis:260px}.side.hidden{margin-left:-260px}
+.brand{min-height:64px;border-bottom:0}.brand .grow{flex:1}.brand b{letter-spacing:-.4px;font-size:16px}
+.top{min-height:64px;border-bottom:0;padding:10px 24px}.top .title{font-weight:500;color:var(--silver-lo)}
+.btn{border-color:transparent;min-height:40px}.btn:hover,.modelbtn:hover{background:#ffffff09;filter:none}.btn.primary{background:#ffffff08;border-color:var(--line-hi)}
+.searchbar input,.field input,.field select,.field textarea{background:#ffffff05}
+.sitem.active{background:#ffffff09;border-color:transparent}.sitem .del{opacity:1;width:28px;height:32px}.sitem .del svg{width:14px;height:14px}
+.chat{padding:24px 28px;scroll-behavior:auto}.msg{max-width:800px;margin-bottom:28px}.msg .av{border:0;color:var(--acc)}
+.msg.user .bubble{background:#30302d;border:0;border-radius:18px;padding:14px 18px}.bubble{border:0;padding:8px 0;line-height:1.75}
+.msg .who{font-size:10px;letter-spacing:1px;margin-bottom:6px}.bubble pre,.tool{background:#191918}
+.empty{margin:clamp(36px,12vh,150px) auto 24px;max-width:660px}.empty h2{font-family:Georgia,serif;font-weight:400;font-size:clamp(28px,4vw,42px);letter-spacing:-1px;color:#f1eadd}
+.empty>div:not(.chips){font-size:14px;max-width:470px;margin:12px auto;color:var(--silver-lo)}
+.chips{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:28px}.chip{padding:15px;background:transparent;border-radius:14px;font-size:12px;line-height:1.6;color:#ccc6b9}
+.composer{border:0;background:var(--bg);padding:10px 24px max(16px,env(safe-area-inset-bottom))}.inner{max-width:800px;background:#2b2b28;border:1px solid #ffffff24;border-radius:22px;padding:12px 14px 8px;box-shadow:0 8px 32px #0002;display:flex;flex-direction:column}
+.attachrow{order:0;margin:0}.inputrow{order:1;align-items:flex-end}.modelbar{order:2;margin:10px 0 0;gap:8px;min-width:0}.hint{order:3;margin:8px 2px 0;font-size:10px;padding-top:8px;border-top:1px solid #ffffff08}
+textarea#msg{background:transparent;border:0;padding:8px 4px;min-height:58px;max-height:200px;font-size:16px;line-height:1.5}
+.iconbtn,.sendbtn{width:40px;height:40px;flex-basis:40px;border-radius:12px}.iconbtn{border-color:var(--line)}.sendbtn{background:#d9a581;color:#211d19;border:0}.sendbtn:disabled{opacity:.45}
+.modelbtn{border:0;padding:8px;min-height:44px;max-width:min(400px,60vw);font-size:12px}.modelbtn span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.engpill{font-size:9px;border:0}.engpill.cc{background:none;color:#aaa69c}.elapsed{font-size:11px}
+.mdd{background:#292926;bottom:calc(100% + 10px);width:min(370px,calc(100vw - 40px));max-width:none;max-height:min(52dvh,450px);border-radius:16px;box-shadow:0 16px 60px #0008;overscroll-behavior:contain;z-index:65}.mdd .opt{min-height:44px;white-space:normal}.mdd .opt:hover{background:#ffffff08}
+.fab{display:none}.drawer{background:#191918;width:350px;flex-basis:350px}.dh{min-height:64px}.files{padding:12px}.fitem{min-height:44px}.viewer textarea{background:#212120}
+@media(max-width:900px){.side{width:min(85vw,310px);flex-basis:auto}.side.hidden{margin-left:-90vw}.top{padding:8px 12px;min-height:56px}.chat{padding:16px 12px}.composer{padding:8px 10px max(12px,env(safe-area-inset-bottom))}.inner{padding:10px 10px 8px;border-radius:19px}.drawer{width:min(92vw,420px);flex-basis:auto}.chips{grid-template-columns:1fr}.chip{padding:12px}.empty{margin:36px auto 20px}.empty h2{font-size:30px}.msg{gap:6px}.msg .av{width:22px;flex-basis:22px}.modelbar{flex-wrap:wrap}.engpill{display:none}.modelbtn{max-width:65vw}.mdd{left:0;right:auto;min-width:0}.hint #hintleft{overflow:hidden;white-space:nowrap;text-overflow:ellipsis}.bubble{font-size:15px}}
+
 </style>
 </head>
 <body>
@@ -245,8 +271,8 @@
     <div class="chatarea">
       <div class="chat" id="chat">
         <div class="empty" id="emptystate">
-          <h2>What should the agent build?</h2>
-          <div>Real Claude Code runs in this session's own workspace with full root and no permission prompts. Files it creates show up in the workspace panel.</div>
+          <h2>Let’s build something.</h2>
+          <div>Your ideas, a working project. Chat, create files, and follow each step in your workspace.</div>
           <div class="chips">
             <div class="chip" onclick="quick(this)">Build a Python script that scrapes Hacker News top stories into a CSV</div>
             <div class="chip" onclick="quick(this)">Create a single-file todo app (HTML/CSS/JS) and run it locally</div>
@@ -355,12 +381,15 @@ function renderSessions(){
 async function newSession(){ try{ const s=await api('/agent/api/sessions',{method:'POST',body:JSON.stringify({engine:S.engine,model:S.model})}); S.sessions.unshift(s); S.sid=s.id; S.messages=[]; S.attachments=[]; S.files=[]; renderSessions(); renderMessages(); renderAttachments(); refreshFiles(); $('title').textContent=s.title||'New chat'; if(isMobile()) closeOverlays(); $('msg').focus(); }catch(e){ toast('New chat failed: '+e.message); } }
 async function openSession(id){ if(S.streaming){ toast('Wait for the current run'); return; } try{ const d=await api('/agent/api/sessions/'+id); S.sid=id; S.messages=d.messages||[]; S.attachments=[]; S.engine=d.session.engine||'claude'; S.model=d.session.model||'default'; S.providerId=d.session.provider_id||''; $('title').textContent=d.session.title||'New chat'; setModelUI(); renderSessions(); renderMessages(); renderAttachments(); refreshFiles(); if(isMobile()) closeOverlays(); }catch(e){ toast('Open failed: '+e.message); } }
 async function delSession(id){ if(!confirm('Delete this chat and its workspace?')) return; try{ await api('/agent/api/sessions/'+id,{method:'DELETE'}); if(S.sid===id){ S.sid=null; S.messages=[]; $('title').textContent='New chat'; renderMessages(); $('files').innerHTML=''; $('fabbadge').classList.remove('show'); } loadSessions(); toast('Deleted'); }catch(e){ toast('Delete failed: '+e.message); } }
-function isMobile(){ return window.matchMedia('(max-width:900px)').matches; }
+const mobileQuery=window.matchMedia('(max-width:900px)');
+mobileQuery.addEventListener('change',()=>{closeOverlays();if(!mobileQuery.matches)$('side').classList.remove('hidden');});
+function isMobile(){ return mobileQuery.matches; }
 function showBackdrop(on){ $('backdrop').classList.toggle('show',!!on); }
 function closeOverlays(){ $('drawer').classList.add('hidden'); $('side').classList.add('hidden'); showBackdrop(false); }
 function toggleSide(){ const open=$('side').classList.contains('hidden'); $('side').classList.toggle('hidden'); if(open&&isMobile()){ $('drawer').classList.add('hidden'); showBackdrop(true); } else if(!open){ showBackdrop(false); } }
 
-function renderMessages(){ const c=$('chat'); if(!S.messages.length){ c.innerHTML=''; if($('emptystate')) c.appendChild($('emptystate')); else c.innerHTML='<div class="empty"><h2>What should the agent build?</h2></div>'; return; } c.innerHTML=S.messages.map(renderMessage).join(''); c.scrollTop=c.scrollHeight; }
+const EMPTY_HTML=$('chat').innerHTML;
+function renderMessages(){ const c=$('chat'); if(!S.messages.length){ c.innerHTML=EMPTY_HTML; return; } c.innerHTML=S.messages.map(renderMessage).join(''); c.scrollTop=c.scrollHeight; }
 function renderMessage(m){ const u=m.role==='user'; const who=u?'You':(m.meta&&m.meta.engine==='claude'?'Claude Code':'Assistant'); const tr=(m.meta&&m.meta.trace)||[]; const tools=tr.length?'<div class="tools">'+tr.map(renderTool).join('')+'</div>':'';
   return `<div class="msg ${u?'user':''}"><div class="av">${u?SV.user:SV.ai}</div><div class="body"><div class="who">${who}${m.meta&&m.meta.is_error?' · <span style="color:var(--bad)">error</span>':''}</div><div class="bubble">${md(m.content||'')}</div>${tools}</div></div>`; }
 function renderTool(t){ if(t.type==='file') return `<div class="tool"><div class="th">${SV.file}<span class="nm">${esc((t.action||'file'))}</span><span class="cl">${esc(t.path)}</span></div></div>`;
@@ -392,7 +421,8 @@ async function send(){
   const live=$('live'), lt=$('livetools'); let buf='', trace=[], started=false;
   S.streaming=true; $('sendbtn').disabled=true; $('stopbtn').style.display='inline-flex'; setElapsed(true); $('hintright').textContent='running...';
   S.abort=new AbortController();
-  const paint=()=>{ live.innerHTML=md(buf)||'<span class="spin"></span> working...'; c.scrollTop=c.scrollHeight; };
+  let paintTimer=null;
+  const paint=()=>{ if(paintTimer) return; paintTimer=setTimeout(()=>{paintTimer=null; const follow=c.scrollHeight-c.scrollTop-c.clientHeight<180; live.textContent=buf||'Working…'; if(follow)c.scrollTop=c.scrollHeight;},80); };
   try{
     const resp=await fetch(`/agent/api/sessions/${S.sid}/chat`,{method:'POST',headers:{'Content-Type':'application/json'},signal:S.abort.signal,body:JSON.stringify({message:text,attachments:att,engine:S.engine,model:S.model,provider_id:S.providerId})});
     if(!resp.ok||!resp.body) throw new Error('HTTP '+resp.status);
@@ -402,12 +432,13 @@ async function send(){
         const t=ev.type;
         if(t==='text'){ started=true; buf+=ev.text||''; paint(); }
         else if(t==='tool_use'||t==='tool_result'||t==='file'){ trace.push(ev); lt.innerHTML=trace.map(renderTool).join(''); started=true; c.scrollTop=c.scrollHeight; }
+        else if(t==='heartbeat'){ $('hintright').textContent='Connected · waiting for model'; }
         else if(t==='init'){ $('hintright').textContent='claude '+(ev.model||''); }
         else if(t==='error'){ buf+=(buf?'\n\n':'')+ev.message; paint(); }
       }
     }
   }catch(e){ if(e.name==='AbortError'){ buf+=(buf?'\n\n':'')+'_Stopped._'; } else { buf+=(buf?'\n\n':'')+'Error: '+e.message; } paint(); }
-  finally{ S.streaming=false; $('sendbtn').disabled=false; $('stopbtn').style.display='none'; setElapsed(false); $('hintright').textContent=''; if(!buf&&!trace.length) live.innerHTML='_no output_'; await reloadCurrent(); }
+  finally{ if(paintTimer)clearTimeout(paintTimer); S.streaming=false; $('sendbtn').disabled=false; $('stopbtn').style.display='none'; setElapsed(false); $('hintright').textContent=''; if(!buf&&!trace.length) live.innerHTML='_no output_'; await reloadCurrent(); }
 }
 async function reloadCurrent(){ if(!S.sid) return; try{ const d=await api('/agent/api/sessions/'+S.sid); S.messages=d.messages||[]; renderMessages(); }catch(e){} loadSessions(); refreshFiles(); }
 
@@ -420,14 +451,14 @@ function renderFiles(){ const el=$('files'); if(!S.files.length){ el.innerHTML='
   el.innerHTML=S.files.map(f=>{ const ip=f.is_dir?SV.dir:SV.file; const sz=f.is_dir?'':fmtSize(f.size); return `<div class="fitem${f.is_dir?' dir':''}" onclick="${f.is_dir?'':`openFile('${f.path.replace(/'/g,"\\'")}')`}">${ip}<span class="p">${esc(f.path)}</span><span class="s">${sz}</span></div>`; }).join(''); }
 function fmtSize(n){ return n>1048576?(n/1048576).toFixed(1)+'M':n>1024?(n/1024).toFixed(1)+'K':n+'B'; }
 async function openFile(path){ try{ const d=await api(`/agent/api/sessions/${S.sid}/file?path=${encodeURIComponent(path)}`); S.viewPath=path; $('vpath').textContent=path; $('vbody').value=d.content||''; $('viewer').classList.add('open'); }catch(e){ toast('Open failed: '+e.message); } }
-async function saveViewer(){ if(!S.viewPath) return; try{ await api(`/agent/api/sessions/${S.sid}/file`,{method:'POST',body:JSON.stringify({path:S.viewPath,content:$('vbody').value})}); toast('Saved'); refreshFiles(); }catch(e){ toast('Save failed: '+e.message); } }
+async function saveViewer(){ if(!S.viewPath) return; try{ await api(`/agent/api/sessions/${S.sid}/file`,{method:'POST',body:JSON.stringify({path:S.viewPath,content:$('vbody').value,overwrite:true})}); toast('Saved'); refreshFiles(); }catch(e){ toast('Save failed: '+e.message); } }
 
 async function globalSearch(){ const q=$('qbox').value.trim(); if(!q){ loadSessions(); return; } try{ const d=await api('/agent/api/search?q='+encodeURIComponent(q)); const el=$('sess'); if(!d.results.length){ el.innerHTML='<div style="padding:14px;color:var(--mut);font-size:13px">No matches.</div>'; return; } el.innerHTML=d.results.map(r=>`<div class="sitem" onclick="openSession('${r.session.id}')"><div class="t"><b>${esc(r.session.title)}</b><span>${r.messages.length} messages · ${r.files.length} files</span></div></div>`).join(''); }catch(e){ toast('Search failed: '+e.message); } }
 
 function toggleModelMenu(ev){ ev.stopPropagation(); $('mdd').classList.toggle('open'); }
 document.addEventListener('pointerdown',(e)=>{ if(!e.target.closest('#modelmenu')) $('mdd').classList.remove('open'); });
 function setModelUI(){ const cc=(S.engine==='claude'); $('modelbtnlabel').textContent=cc?((S.model&&S.model!=='default')?S.model:'Claude Code'):(S.model||'auto'); const p=$('engpill'); p.textContent=cc?'real Claude Code':'chat mode'; p.className='engpill'+(cc?' cc':''); $('hintleft').textContent=cc?'real Claude Code · full root · no permission prompts':'Chat engine · OpenAI-compatible endpoint'; }
-function applyChoice(engine,model,provId){ S.engine=engine||'claude'; S.model=model||(engine==='claude'?'default':'auto'); S.providerId=provId||''; $('mdd').classList.remove('open'); setModelUI(); if(S.sid) api('/agent/api/sessions/'+S.sid,{method:'PATCH',body:JSON.stringify({model:S.model,engine:S.engine,provider_id:S.providerId})}).catch(()=>{}); }
+function applyChoice(engine,model,provId){ if(S.streaming){toast('Stop the current run before switching models');return;} S.engine=engine||'claude'; S.model=model||(engine==='claude'?'default':'auto'); S.providerId=provId||''; $('mdd').classList.remove('open'); setModelUI(); if(S.sid) api('/agent/api/sessions/'+S.sid,{method:'PATCH',body:JSON.stringify({model:S.model,engine:S.engine,provider_id:S.providerId})}).catch(()=>{}); }
 function pickTwinMindModel(id){ applyChoice('claude',id,''); }
 function pickModel(id,provId,kind){ applyChoice(kind==='anthropic'?'claude':'openai',id,provId); }
 function pickEngine(e){ if(e==='claude') applyChoice('claude','default',''); else applyChoice('openai','auto',''); }
@@ -454,7 +485,7 @@ async function checkStatus(){ try{ const d=await api('/agent/api/status'); S.sta
 async function openSettings(){ $('setupModal').classList.add('open'); await checkStatus(); renderSetup(); }
 function renderSetup(){ const d=S.status||{}; let h=''; if(!d.claude_installed) h+='<div class="warnbox">Claude Code CLI not found. Install: npm install -g @anthropic-ai/claude-code</div>'; h+='<div class="field"><label>Claude Code CLI</label><div class="tokens">'+(d.claude_installed?'installed ('+esc(d.claude_bin||'claude')+')':'missing')+'</div></div>'; h+='<div class="field"><label>Anthropic key in server env</label><div class="tokens">'+(d.anthropic_key_present?'present':'not set - using TwinMind bridge')+'</div></div>'; h+='<div class="field"><label>TwinMind gateway base</label><div class="tokens">'+esc(d.gateway_base||'')+'</div></div>'; h+='<div class="field"><label>Custom providers</label><div class="tokens">'+(d.providers||0)+' configured</div></div>'; $('setupBody').innerHTML=h; }
 
-(function(){ checkStatus(); loadSessions(); loadModels(); autosize(); if(isMobile()) $('side').classList.add('hidden'); })();
+(function(){ checkStatus(); loadSessions(); loadModels(); autosize(); $('side').classList.toggle('hidden',isMobile()); })();
 </script>
 </body>
 </html>

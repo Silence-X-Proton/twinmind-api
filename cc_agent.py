@@ -25,6 +25,7 @@ import asyncio
 import json
 import os
 import shutil
+import signal
 import uuid
 from typing import Any, AsyncGenerator, Optional
 
@@ -148,6 +149,171 @@ def normalize_cc_event(obj: dict) -> list[dict]:
     return out
 
 
+# Bound individual JSON records, not StreamReader's much smaller default line
+# limit. Large tool outputs are legitimate, but an endless line is not.
+_CC_MAX_LINE_BYTES = 16 * 1024 * 1024
+_CC_CHUNK_BYTES = 64 * 1024
+_CC_STDERR_TAIL_BYTES = 64 * 1024
+_CC_TERMINATE_TIMEOUT = 1.0
+
+
+async def _cc_lines(reader: asyncio.StreamReader) -> AsyncGenerator[bytes, None]:
+    pending = bytearray()
+    while chunk := await reader.read(_CC_CHUNK_BYTES):
+        start = 0
+        while start < len(chunk):
+            end = chunk.find(b"\n", start)
+            stop = len(chunk) if end < 0 else end
+            if len(pending) + stop - start > _CC_MAX_LINE_BYTES:
+                raise ValueError(f"Claude stdout JSON line exceeds {_CC_MAX_LINE_BYTES} bytes")
+            pending.extend(chunk[start:stop])
+            if end < 0:
+                break
+            yield bytes(pending)
+            pending.clear()
+            start = end + 1
+    if pending:
+        yield bytes(pending)
+
+
+class _CCStreamEvents:
+    """Reconcile append-only partials with snapshots of the same message/block.
+
+    Never deduplicate by global text: a later message can legitimately repeat
+    the same words. Anonymous snapshots consume their pending partial state.
+    """
+
+    def __init__(self):
+        self.message_id = None
+        self.blocks: dict[tuple[int, str], str] = {}
+        self.saw_text = False
+
+    def normalize(self, obj: dict) -> list[dict]:
+        out: list[dict] = []
+        kind = obj.get("type")
+        if kind == "stream_event":
+            event = obj.get("event") or {}
+            if event.get("type") == "message_start":
+                self.message_id = (event.get("message") or {}).get("id")
+                self.blocks.clear()
+            out = normalize_cc_event(obj)
+            if event.get("type") == "content_block_start":
+                block = event.get("content_block") or {}
+                block_kind = block.get("type")
+                if block_kind in ("text", "thinking") and block.get(block_kind):
+                    out = [{"type": block_kind, "text": block[block_kind]}]
+            for item in out:
+                key = (event.get("index", 0), item["type"])
+                self.blocks[key] = self.blocks.get(key, "") + item["text"]
+        elif kind == "assistant":
+            message = obj.get("message") or {}
+            mid = message.get("id")
+            if mid is not None and self.message_id is not None and mid != self.message_id:
+                self.blocks.clear()
+            self.message_id = mid
+            for index, block in enumerate(_norm_content(message.get("content"))):
+                block_kind = block.get("type")
+                if block_kind in ("text", "thinking"):
+                    text = block.get(block_kind) or ""
+                    key = (index, block_kind)
+                    partial = self.blocks.get(key, "")
+                    # Snapshots are normally equal to or extend the partial.
+                    # A stale shorter snapshot must not replay existing text.
+                    if text.startswith(partial):
+                        suffix = text[len(partial):]
+                    elif partial.startswith(text):
+                        suffix = ""
+                    else:
+                        # The UI cannot retract a divergent partial. Preserve
+                        # the changed snapshot rather than silently lose it.
+                        suffix = text
+                    if suffix:
+                        out.append({"type": block_kind, "text": suffix})
+                        self.blocks[key] = partial + suffix
+                else:
+                    out.extend(normalize_cc_event({"type": "assistant", "message": {"content": [block]}}))
+            if mid is None:
+                self.blocks.clear()
+        else:
+            out = normalize_cc_event(obj)
+            if kind == "result" and not self.saw_text and obj.get("result"):
+                # Both the route's saved transcript and the UI consume text,
+                # not result.text. Keep the metadata event as well.
+                out.insert(0, {"type": "text", "text": obj["result"]})
+        self.saw_text |= any(e["type"] == "text" and e.get("text") for e in out)
+        return out
+
+
+async def _cc_feed(writer: asyncio.StreamWriter, prompt: str) -> None:
+    try:
+        # Encode slices so neither argv limits nor a second full UTF-8 copy of
+        # an arbitrarily long prompt constrains input size.
+        for start in range(0, len(prompt), _CC_CHUNK_BYTES):
+            writer.write(prompt[start:start + _CC_CHUNK_BYTES].encode("utf-8"))
+            await writer.drain()
+    except (BrokenPipeError, ConnectionResetError):
+        pass  # A CLI may reject a request before consuming its entire input.
+    finally:
+        writer.close()
+
+
+async def _cc_drain(reader: asyncio.StreamReader, tail: Optional[bytearray] = None) -> None:
+    while chunk := await reader.read(_CC_CHUNK_BYTES):
+        if tail is not None:
+            tail.extend(chunk)
+            del tail[:-_CC_STDERR_TAIL_BYTES]
+
+
+async def _cc_cleanup(spawn: asyncio.Task, tasks: list[asyncio.Task]) -> None:
+    # Shielded by the owner, including when cancellation races process spawn.
+    try:
+        proc = await spawn
+    except Exception:
+        return
+
+    def send(sig):
+        try:
+            if os.name == "posix":
+                os.killpg(proc.pid, sig)
+            elif proc.returncode is None:
+                proc.send_signal(sig)
+        except ProcessLookupError:
+            pass
+
+    send(signal.SIGTERM)
+    # Stop blocked prompt writes; abort drops buffered input on early close.
+    if tasks:
+        tasks[0].cancel()
+    if proc.stdin is not None:
+        transport = proc.stdin.transport
+        if not transport.is_closing() or transport.get_write_buffer_size():
+            transport.abort()
+    if proc.stdout is not None:
+        tasks.append(asyncio.create_task(_cc_drain(proc.stdout)))
+    if not tasks or len(tasks) == 1:
+        if proc.stderr is not None:
+            tasks.append(asyncio.create_task(_cc_drain(proc.stderr)))
+    try:
+        deadline = asyncio.get_running_loop().time() + _CC_TERMINATE_TIMEOUT
+        while True:
+            if os.name == "posix":
+                try:
+                    os.killpg(proc.pid, 0)
+                except ProcessLookupError:
+                    break
+            elif proc.returncode is not None:
+                break
+            if asyncio.get_running_loop().time() >= deadline:
+                send(signal.SIGKILL)
+                break
+            await asyncio.sleep(.02)
+        await proc.wait()  # Reap even after escalation, never fire-and-forget.
+    finally:
+        for task in tasks:
+            task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
+
+
 async def stream_claude(
     prompt: str,
     workspace: str,
@@ -167,7 +333,7 @@ async def stream_claude(
     new_session = not claude_session_id
     sid = claude_session_id or str(uuid.uuid4())
 
-    cmd = [CLAUDE_BIN, "-p", prompt,
+    cmd = [CLAUDE_BIN, "-p",
            "--output-format", "stream-json",
            "--verbose",
            "--include-partial-messages",
@@ -191,47 +357,56 @@ async def stream_claude(
 
     env = _provider_env(provider, model if (env_uses_bridge := (not provider)) else "")
 
-    proc = await asyncio.create_subprocess_exec(
+    spawn = asyncio.create_task(asyncio.create_subprocess_exec(
         *cmd, cwd=workspace, env=env,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
-        stdin=asyncio.subprocess.DEVNULL,
-    )
-
-    saw_result = False
+        stdin=asyncio.subprocess.PIPE,
+        start_new_session=(os.name == "posix"),
+    ))
+    tasks: list[asyncio.Task] = []
+    tail = bytearray()
+    events = _CCStreamEvents()
+    transport_error = None
     try:
-        assert proc.stdout is not None
-        while True:
-            line = await proc.stdout.readline()
-            if not line:
-                break
+        proc = await asyncio.shield(spawn)
+        assert proc.stdout is not None and proc.stderr is not None and proc.stdin is not None
+        tasks.append(asyncio.create_task(_cc_feed(proc.stdin, prompt)))
+        tasks.append(asyncio.create_task(_cc_drain(proc.stderr, tail)))
+        async for line in _cc_lines(proc.stdout):
             s = line.decode("utf-8", "replace").strip()
             if not s:
                 continue
             try:
                 obj = json.loads(s)
             except json.JSONDecodeError:
+                events.saw_text = True
                 yield {"type": "text", "text": s}
                 continue
-            for ev in normalize_cc_event(obj):
-                if ev.get("type") == "result":
-                    saw_result = True
-                yield ev
+            if isinstance(obj, dict):
+                for ev in events.normalize(obj):
+                    yield ev
+        await proc.wait()
+        await asyncio.gather(*tasks)
+    except (OSError, ValueError) as exc:
+        transport_error = str(exc)
     finally:
-        try:
-            await asyncio.wait_for(proc.wait(), timeout=10)
-        except asyncio.TimeoutError:
-            proc.kill()
-
-    if not saw_result:
-        err = ""
-        if proc.stderr is not None:
+        cleanup = asyncio.create_task(_cc_cleanup(spawn, tasks))
+        cancelled = False
+        while not cleanup.done():
             try:
-                err = (await asyncio.wait_for(proc.stderr.read(), timeout=2)).decode("utf-8", "replace")
-            except Exception:
-                err = ""
-        if proc.returncode not in (0, None):
-            yield {"type": "error", "message": (err or f"claude exited {proc.returncode}")[:2000]}
+                await asyncio.shield(cleanup)
+            except asyncio.CancelledError:
+                cancelled = True
+        cleanup.result()
+        if cancelled:
+            raise asyncio.CancelledError
+
+    if transport_error:
+        yield {"type": "error", "message": transport_error}
+    elif proc.returncode not in (0, None):
+        err = tail.decode("utf-8", "replace")[-2000:]
+        yield {"type": "error", "message": err or f"claude exited {proc.returncode}"}
 
 
 async def stream_openai(

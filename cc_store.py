@@ -10,6 +10,7 @@ Keeps, under TWINMIND_DATA_DIR (default ./data):
 from __future__ import annotations
 
 import json
+import ntpath
 import os
 import re
 import shutil
@@ -56,27 +57,43 @@ def _write_json(path: str, data: Any) -> None:
     os.replace(tmp, path)
 
 
+def _validate_sid(sid: str) -> str:
+    """Accept existing generated IDs and safe legacy names; never sanitize IDs."""
+    if (not isinstance(sid, str) or not re.fullmatch(r"[A-Za-z0-9_.-]+", sid)
+            or sid in (".", "..")):
+        raise ValueError("invalid session id")
+    return sid
+
+
 def _sess_path(sid: str) -> str:
-    return os.path.join(SESS_DIR, f"{sid}.json")
+    return _safe_join(SESS_DIR, f"{_validate_sid(sid)}.json")
 
 
 def _msg_path(sid: str) -> str:
-    return os.path.join(SESS_DIR, f"{sid}.jsonl")
+    return _safe_join(SESS_DIR, f"{_validate_sid(sid)}.jsonl")
 
 
 def workspace_dir(sid: str) -> str:
+    d = _safe_join(WS_DIR, _validate_sid(sid))
     _ensure()
-    safe = re.sub(r"[^A-Za-z0-9_.-]", "_", sid or "default")
-    d = os.path.join(WS_DIR, safe)
     os.makedirs(d, exist_ok=True)
     return d
 
 
 def _safe_join(base: str, rel: str) -> str:
-    rel = (rel or "").lstrip("/")
+    """Reject absolute paths, parent components and existing symlink escapes.
+
+    Return the lexical path so exclusive creation also treats an existing
+    in-workspace symlink as a collision rather than creating its target.
+    This is not a sandbox against concurrent hostile symlink replacement.
+    """
+    if (not isinstance(rel, str) or chr(0) in rel or "\\" in rel
+            or os.path.isabs(rel) or ntpath.splitdrive(rel)[0]
+            or ".." in rel.split("/")):
+        raise ValueError("invalid workspace path")
     rb = os.path.realpath(base)
-    full = os.path.realpath(os.path.join(rb, rel))
-    if full != rb and not full.startswith(rb + os.sep):
+    full = os.path.abspath(os.path.join(rb, rel))
+    if os.path.commonpath((rb, os.path.realpath(full))) != rb:
         raise ValueError("path escapes workspace")
     return full
 
@@ -119,8 +136,9 @@ def create_session(title: str = "", engine: str = "claude", model: str = "",
 
 
 def get_session(sid: str) -> Optional[dict]:
+    path = _sess_path(sid)
     _ensure()
-    meta = _read_json(_sess_path(sid), None)
+    meta = _read_json(path, None)
     return meta if isinstance(meta, dict) else None
 
 
@@ -153,6 +171,7 @@ def delete_session(sid: str) -> bool:
 # Messages                                                                     #
 # --------------------------------------------------------------------------- #
 def add_message(sid: str, role: str, content: str, meta: Optional[dict] = None) -> dict:
+    path = _msg_path(sid)
     _ensure()
     msg = {
         "id": new_id("m"),
@@ -162,7 +181,7 @@ def add_message(sid: str, role: str, content: str, meta: Optional[dict] = None) 
         "meta": meta or {},
     }
     with _lock:
-        with open(_msg_path(sid), "a", encoding="utf-8") as f:
+        with open(path, "a", encoding="utf-8") as f:
             f.write(json.dumps(msg, ensure_ascii=False) + "\n")
         s = get_session(sid)
         if s:
@@ -173,9 +192,9 @@ def add_message(sid: str, role: str, content: str, meta: Optional[dict] = None) 
 
 
 def get_messages(sid: str) -> list[dict]:
+    path = _msg_path(sid)
     _ensure()
     out: list[dict] = []
-    path = _msg_path(sid)
     if not os.path.exists(path):
         return out
     with open(path, "r", encoding="utf-8") as f:
@@ -239,24 +258,38 @@ def read_file(sid: str, rel: str, max_bytes: int = 400_000) -> dict:
             "binary": binary, "content": text}
 
 
-def write_file(sid: str, rel: str, content: str) -> dict:
-    base = workspace_dir(sid)
+def _write_workspace_file(base: str, rel: str, data: bytes, *, overwrite: bool = False) -> dict:
+    """Reserve name, name_1, ... atomically; only explicit overwrite truncates."""
     full = _safe_join(base, rel)
-    os.makedirs(os.path.dirname(full) or base, exist_ok=True)
-    with open(full, "w", encoding="utf-8") as f:
-        f.write(content or "")
-    return {"ok": True, "path": rel, "size": os.path.getsize(full)}
+    os.makedirs(os.path.dirname(full), exist_ok=True)
+    stem, ext = os.path.splitext(rel)
+    index = 0
+    while True:
+        candidate = rel if index == 0 else f"{stem}_{index}{ext}"
+        full = _safe_join(base, candidate)
+        try:
+            f = open(full, "wb" if overwrite else "xb")
+        except FileExistsError:
+            if overwrite:
+                raise
+            index += 1
+            continue
+        with f:
+            f.write(data)
+        return {"ok": True, "path": os.path.relpath(full, base), "size": len(data)}
+
+
+def write_file(sid: str, rel: str, content: str, *, overwrite: bool = False) -> dict:
+    """Write UTF-8 text, allocating a suffix unless overwrite=True is explicit."""
+    return _write_workspace_file(workspace_dir(sid), rel, (content or "").encode("utf-8"),
+                                 overwrite=overwrite)
 
 
 def save_upload(sid: str, filename: str, data: bytes, sub: str = "uploads") -> dict:
     base = workspace_dir(sid)
     safe = os.path.basename(filename or "upload.bin")
     rel = os.path.join(sub, safe) if sub else safe
-    full = _safe_join(base, rel)
-    os.makedirs(os.path.dirname(full) or base, exist_ok=True)
-    with open(full, "wb") as f:
-        f.write(data)
-    return {"ok": True, "path": rel, "size": len(data)}
+    return _write_workspace_file(base, rel, data)
 
 
 def delete_file(sid: str, rel: str) -> bool:
@@ -288,6 +321,7 @@ def _snippet(text: str, ql: str, width: int = 90) -> str:
 
 
 def search(sid: str, query: str, limit: int = 50) -> dict:
+    _validate_sid(sid)
     q = (query or "").strip()
     if not q:
         return {"messages": [], "files": []}

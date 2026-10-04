@@ -38,22 +38,30 @@ def _sse(obj: dict) -> str:
 
 
 async def _with_heartbeat(agen, hb: float = 10.0):
-    """Yield events from `agen`, injecting keep-alive heartbeats when it stalls.
-
-    Long prompts make the model (and the TwinMind bridge) think for a while with
-    no event in between; without this the UI looks frozen. We emit a tiny
-    'heartbeat' event every `hb` seconds so the browser always shows progress.
-    """
+    """Keep one pending read alive across heartbeat intervals; cancel only on close."""
     it = agen.__aiter__()
-    while True:
-        try:
-            ev = await asyncio.wait_for(it.__anext__(), timeout=hb)
-        except asyncio.TimeoutError:
-            yield {"type": "heartbeat"}
-            continue
-        except StopAsyncIteration:
-            return
-        yield ev
+    pending = None
+    try:
+        while True:
+            if pending is None:
+                pending = asyncio.ensure_future(it.__anext__())
+            ready, _ = await asyncio.wait({pending}, timeout=max(.01, hb))
+            if not ready:
+                yield {"type": "heartbeat"}
+                continue
+            try:
+                event = pending.result()
+            except StopAsyncIteration:
+                return
+            pending = None
+            yield event
+    finally:
+        if pending is not None:
+            pending.cancel()
+            await asyncio.gather(pending, return_exceptions=True)
+        close = getattr(it, "aclose", None)
+        if close is not None:
+            await close()
 
 
 # --------------------------------------------------------------------------- #
@@ -144,7 +152,8 @@ async def write_file(sid: str, payload: dict):
     if not store.get_session(sid):
         raise HTTPException(status_code=404, detail="session not found")
     try:
-        return store.write_file(sid, payload.get("path") or "", payload.get("content") or "")
+        return store.write_file(sid, payload.get("path") or "", payload.get("content") or "",
+                                overwrite=payload.get("overwrite") is True)
     except ValueError:
         raise HTTPException(status_code=400, detail="invalid path")
 
@@ -340,8 +349,12 @@ async def chat(sid: str, request: Request):
                         elif ev.get("type") == "error":
                             is_error = True
                         yield _sse(ev)
+        except asyncio.CancelledError:
+            is_error = True
+            raise
         except Exception as e:
             is_error = True
+            final_text.append(f"Error: {type(e).__name__}: {e}")
             yield _sse({"type": "error", "message": f"{type(e).__name__}: {e}"})
         finally:
             text = "".join(final_text)
@@ -349,7 +362,7 @@ async def chat(sid: str, request: Request):
                                                         "engine": engine, "model": model})
             if new_cc_sid and new_cc_sid != meta.get("claude_session_id"):
                 store.update_session(sid, claude_session_id=new_cc_sid)
-            yield _sse({"type": "done", "is_error": is_error})
+        yield _sse({"type": "done", "is_error": is_error})
 
     return StreamingResponse(
         gen(), media_type="text/event-stream",
