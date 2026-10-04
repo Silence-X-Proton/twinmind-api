@@ -461,3 +461,55 @@ SSE event types: `start`, `init`, `text`, `thinking`, `tool_use`, `tool_result`,
 > Security: the agent runs with full root and no permission prompts **by design**, as
 > requested. Only expose `/agent` on hosts you control; set `TWINMIND_ADMIN_KEY` and/or
 > put it behind an authenticated reverse proxy if the URL is public.
+
+---
+
+## 🪄 Zero-setup Claude Code on TwinMind models (no Anthropic key)
+
+The `/agent` studio runs the **real Claude Code CLI**, but you do **not** need an
+Anthropic key. When no key is present, Claude Code is pointed at the built-in
+**TwinMind bridge**, which translates Anthropic's Messages API into TwinMind
+chats and emulates tool calls, so Claude Code's Bash/Read/Write/Edit tools run on
+TwinMind models.
+
+```
+Claude Code CLI  -->  /anthropic/v1/messages  -->  TwinMind (api2.twinmind.com)
+   (agent loop)          (bridge: tool emulation)         models
+```
+
+- Default bridge model: `claude-sonnet-5` (most reliable at tool calls).
+- Override with `TWINMIND_AGENT_MODEL` (e.g. `gemini-3.7-flash`).
+- Add a real key (`ANTHROPIC_API_KEY`) or an Anthropic-compatible provider and
+the bridge is bypassed automatically.
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `TWINMIND_AGENT_MODEL` | `claude-sonnet-5` | TwinMind model the bridge uses |
+| `TWINMIND_BRIDGE_RETRIES` | `7` | retries when TwinMind refuses tool use |
+| `TWINMIND_BRIDGE_URL` | `http://127.0.0.1:<port>/anthropic` | bridge base URL |
+| `TWINMIND_BRIDGE_SYSTEM_BUDGET` | `1800` | max system-prompt chars kept |
+| `TWINMIND_BRIDGE_DEBUG` | (off) | dump the last bridge request to `/tmp` |
+
+> TwinMind runs its own companion persona and refuses coding/tool use on some
+> attempts; the bridge retries with a minimal prompt until a tool call comes
+> back (measured ~60% per attempt, ~99.9% within 7 attempts).
+
+### Fully automatic start - one command
+
+```bash
+./run.sh
+```
+
+`run.sh` does everything: creates the venv, installs requirements, installs
+Node.js + Claude Code CLI if missing, and starts the server. No manual `pip`,
+`npm`, `export` or key steps. Colab (`colab.sh`) and the VPS installer
+(`vps-install.sh`) do the same automatically.
+
+### Mobile UI + workspace button
+
+The studio is mobile-first:
+
+- a **floating folder button** (bottom-right) always opens the workspace files
+  panel, with a live badge showing the file count;
+- the files panel and chat list become slide-in overlays with a backdrop;
+- larger touch targets, 16px inputs (no iOS zoom), and safe-area padding.
