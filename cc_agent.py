@@ -38,7 +38,7 @@ def claude_available() -> bool:
     return shutil.which(CLAUDE_BIN) is not None
 
 
-def _provider_env(provider: Optional[dict]) -> dict:
+def _provider_env(provider: Optional[dict], model: str = "") -> dict:
     """Build env for the Claude Code subprocess.
 
     Priority:
@@ -69,6 +69,11 @@ def _provider_env(provider: Optional[dict]) -> dict:
         env["ANTHROPIC_API_KEY"] = env.get("TWINMIND_BRIDGE_KEY", "twinmind-bridge")
         env["ANTHROPIC_AUTH_TOKEN"] = env["ANTHROPIC_API_KEY"]
         env["CLAUDE_CODE_SKIP_BEDROCK_AUTH"] = "1"
+        # Tell the bridge which TwinMind model to use for THIS session. Claude
+        # Code forwards ANTHROPIC_CUSTOM_HEADERS on every request, so switching
+        # the model in the UI takes effect on the next message.
+        if model:
+            env["ANTHROPIC_CUSTOM_HEADERS"] = f"x-twinmind-model: {model}"
     return env
 
 
@@ -172,8 +177,10 @@ async def stream_claude(
         cmd += ["--session-id", sid]
     else:
         cmd += ["--resume", sid]
-    # Only forward a real model choice; 'default'/'auto'/'' let the CLI decide.
-    if model and model.lower() not in ("default", "auto", "none", "cli"):
+    # --model only accepts Anthropic aliases (opus/sonnet/haiku) or full Anthropic
+    # names. TwinMind ids are routed to the bridge via the x-twinmind-model header
+    # instead, so the CLI's own model label stays valid.
+    if model and model.lower() in ("opus", "sonnet", "haiku"):
         cmd += ["--model", model]
     cmd += ["--add-dir", workspace]
     for d in (extra_dirs or []):
@@ -182,7 +189,7 @@ async def stream_claude(
     if max_turns:
         cmd += ["--max-turns", str(max_turns)]
 
-    env = _provider_env(provider)
+    env = _provider_env(provider, model if (env_uses_bridge := (not provider)) else "")
 
     proc = await asyncio.create_subprocess_exec(
         *cmd, cwd=workspace, env=env,

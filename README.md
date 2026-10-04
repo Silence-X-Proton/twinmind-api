@@ -559,3 +559,20 @@ The studio is mobile-first:
   panel, with a live badge showing the file count;
 - the files panel and chat list become slide-in overlays with a backdrop;
 - larger touch targets, 16px inputs (no iOS zoom), and safe-area padding.
+
+### 🎛️ Choose the model inside Claude Code
+
+The studio's **model selector sits at the bottom**, right above the message box
+(Claude-style). It switches **which TwinMind model the real Claude Code CLI runs
+on** — the agent loop, shell and file tools stay the same.
+
+- **Claude Code** — real CLI engine (shell, files, root, no prompts).
+- **Model inside Claude Code** — pick any TwinMind model; it is passed to the
+  bridge per request via the `x-twinmind-model` header, so switching takes effect
+  on the next message without restarting anything.
+- **Native CLI aliases** — `opus` / `sonnet` / `haiku` are forwarded to the CLI's
+  own `--model` flag.
+- **Custom providers** — providers you add appear here too.
+
+The `x-twinmind-model` header is honoured only when the request goes through the
+built-in bridge; with a real `ANTHROPIC_API_KEY` the CLI uses Anthropic directly.

@@ -151,6 +151,20 @@
   .mdd .opt:hover{background:rgba(255,255,255,.06)}
   .mdd .grp{padding:7px 10px 3px;font-size:10.5px;letter-spacing:.8px;text-transform:uppercase;color:var(--mut)}
   .mdd .opt.sel{background:rgba(200,182,255,.14);color:#fff}
+  /* ---------- bottom model selector (Claude-style) ---------- */
+  .modelbar{display:flex;align-items:center;gap:9px;margin-bottom:8px}
+  .menu.up .mdd{top:auto;bottom:calc(100% + 8px);left:0;right:auto;min-width:260px;max-height:58vh}
+  .modelbar .mbtn{display:inline-flex;align-items:center;gap:6px;padding:7px 12px;border-radius:999px;
+    background:linear-gradient(180deg,#1e2430,#141922);border:1px solid var(--line-hi);font-size:13px;font-weight:600}
+  .modelbar .mbtn .caret{color:var(--mut);font-size:11px}
+  .modelbar .mbtn:hover{filter:brightness(1.15)}
+  .gotpill{font-size:10.5px;font-weight:800;letter-spacing:.7px;text-transform:uppercase;padding:5px 9px;border-radius:999px;
+    border:1px solid rgba(200,182,255,.3);background:rgba(200,182,255,.1);color:#cdbcff}
+  .mdd .opt .sub{display:block;font-size:11px;color:var(--mut);margin-top:1px}
+  @media (max-width:900px){
+    .modelbar{margin-bottom:6px}
+    .menu.up .mdd{left:0;right:0;min-width:0;max-height:50vh}
+  }
   /* ---------- floating files button + backdrop ---------- */
   .fab{position:fixed;right:14px;bottom:96px;z-index:35;width:54px;height:54px;border-radius:16px;
     display:flex;align-items:center;justify-content:center;cursor:pointer;
@@ -225,10 +239,6 @@
       </button>
       <div class="grow"><div class="title" id="title">New chat</div></div>
       <span class="pill" id="ccpill" title="Claude Code CLI status">claude ?</span>
-      <div class="menu">
-        <div class="mbtn" onclick="toggleModelMenu(event)" id="modelbtn">auto ▾</div>
-        <div class="mdd" id="mdd"></div>
-      </div>
       <button class="btn sm ghost" onclick="toggleFiles()" title="Workspace files">Files</button>
     </div>
 
@@ -270,6 +280,15 @@
           <input type="file" id="fileinput" multiple style="display:none" onchange="doUpload(this.files);this.value=''">
           <textarea id="msg" placeholder="Ask anything — Claude Code will run commands, read and write files here… (Enter to send, Shift+Enter for newline)" onkeydown="onKey(event)"></textarea>
           <button class="btn primary send" id="sendbtn" onclick="send()" title="Send">↑</button>
+        </div>
+        <div class="modelbar">
+          <div class="menu up">
+            <div class="mbtn" onclick="toggleModelMenu(event)" id="modelbtn" title="Choose model">
+              ✳️ <span id="modelbtnlabel">Claude Code</span> <span class="caret">▾</span>
+            </div>
+            <div class="mdd" id="mdd"></div>
+          </div>
+          <span class="gotpill" id="gotpill" title="Engine">real Claude Code</span>
         </div>
         <div class="hint"><span id="hintleft">Root access · no permission prompts · files saved per session</span><span id="hintright"></span></div>
       </div>
@@ -362,7 +381,7 @@ async function openSession(id){
     S.engine = d.session.engine||'claude'; S.model = d.session.model||'auto';
     S.providerId = d.session.provider_id||'';
     $('title').textContent = d.session.title||'New chat';
-    $('modelbtn').textContent = (S.model||'default')+' ▾';
+    setModelUI();
     renderSessions(); renderMessages(); renderAttachments(); refreshFiles();
   }catch(e){ toast('Open failed: '+e.message); }
 }
@@ -581,23 +600,38 @@ async function globalSearch(){
 function toggleModelMenu(ev){ ev.stopPropagation(); $('mdd').classList.toggle('open'); }
 document.addEventListener('click',()=>$('mdd').classList.remove('open'));
 $('mdd').addEventListener('click',e=>e.stopPropagation());
+// Model choice drives the engine + the TwinMind model that the REAL Claude Code
+// CLI uses (passed to the bridge via the x-twinmind-model header).
+function shortLabel(id){
+  if(!id || id==='default') return 'Claude Code';
+  return id.replace('claude-','').replace('-thinking','').replace('-5-5',' 5.5').replace('-5',' 5');
+}
+function setModelUI(){
+  const isCC = (S.engine==='claude');
+  $('modelbtnlabel').textContent = isCC ? (S.model && S.model!=='default' ? S.model : 'Claude Code') : (S.model||'auto');
+  const gp = $('gotpill');
+  if(gp){ gp.textContent = isCC ? 'real Claude Code' : 'chat mode'; gp.style.opacity = isCC ? '1' : '.6'; }
+  $('hintleft').textContent = isCC
+      ? 'real Claude Code · full root · no permission prompts · files saved per session'
+      : 'Chat engine · OpenAI-compatible endpoint';
+  $('mdd') && $('mdd').querySelectorAll('.opt').forEach(o=>o.classList.remove('sel'));
+}
 function applyChoice(engine, model, provId, label){
   S.engine = engine || 'claude';
   S.model = model || (engine==='claude' ? 'default' : 'auto');
   S.providerId = provId || '';
-  $('modelbtn').textContent = (label || S.model) + ' ▾';
   $('mdd').classList.remove('open');
-  $('hintleft').textContent = (S.engine==='claude'
-      ? 'Claude Code · full root · no permission prompts · files saved per session'
-      : 'Chat engine · OpenAI-compatible endpoint');
+  setModelUI();
   if(S.sid) api('/agent/api/sessions/'+S.sid, {method:'PATCH',
       body:JSON.stringify({model:S.model, engine:S.engine, provider_id:S.providerId})}).catch(()=>{});
 }
+// A TwinMind gateway model chosen while in Claude Code mode = the model the real
+// CLI runs on (engine stays 'claude').
+function pickTwinMindModel(id){
+  applyChoice('claude', id, '', id);
+}
 function pickModel(id, group, provId, kind){
-  // Custom provider: anthropic kind drives Claude Code; openai kind drives the chat engine.
   if(provId){ applyChoice(kind==='anthropic'?'claude':'openai', id, provId, id); return; }
-  // TwinMind gateway models are OpenAI-compatible through /v1.
-  if(group==='TwinMind'){ applyChoice('openai', id, '', id); return; }
   applyChoice('claude', id, '', id);
 }
 function pickEngine(e){
@@ -607,22 +641,26 @@ function pickEngine(e){
 async function loadModels(){
   try{
     const d = await api('/agent/api/models'); S.models = d.models||[];
-    const groups = {};
-    for(const m of S.models){ (groups[m.group]=groups[m.group]||[]).push(m); }
-    let html='<div class="grp">Agent engine</div>';
-    html += `<div class="opt" onclick="pickEngine('claude')">✳️ Claude Code &mdash; shell, files, root</div>`;
-    html += `<div class="grp">Claude Code models</div>`;
-    html += `<div class="opt" onclick="applyChoice('claude','default','','default')">default (CLI choice)</div>`;
+    const twin = S.models.filter(m=>m.group==='TwinMind');
+    let html='';
+    html += `<div class="grp">AI studio engine</div>`;
+    html += `<div class="opt" onclick="pickEngine('claude')">✳️ <b>Claude Code</b> &mdash; real CLI, shell + files + root<span class="sub">full agent loop, no permission prompts</span></div>`;
+    html += `<div class="opt" onclick="pickEngine('openai')">💬 Chat only &mdash; OpenAI-compatible<span class="sub">plain chat, no tools</span></div>`;
+    html += `<div class="grp">Model inside Claude Code</div>`;
+    html += `<div class="opt" onclick="applyChoice('claude','default','','default')">Claude Code default<span class="sub">let the CLI pick</span></div>`;
+    for(const m of twin)
+      html += `<div class="opt" onclick="pickTwinMindModel('${esc(m.id)}')">${esc(m.id)}<span class="sub">runs via TwinMind bridge</span></div>`;
+    html += `<div class="grp">Native CLI aliases</div>`;
     for(const a of ['opus','sonnet','haiku'])
-      html += `<div class="opt" onclick="applyChoice('claude','${a}','','${a}')">${a}</div>`;
-    html += `<div class="grp">Chat only (OpenAI-compatible)</div>`;
-    html += `<div class="opt" onclick="applyChoice('openai','auto','','auto')">auto (TwinMind)</div>`;
-    for(const g of Object.keys(groups)){
-      html += `<div class="grp">${esc(g)}</div>`;
-      for(const m of groups[g])
-        html += `<div class="opt" onclick="pickModel('${esc(m.id)}','${esc(g)}','${esc(m.provider_id||'')}','${esc(m.kind||'')}')">${esc(m.id)}</div>`;
+      html += `<div class="opt" onclick="applyChoice('claude','${a}','','${a}')">${a}<span class="sub">Anthropic alias</span></div>`;
+    const provs = S.models.filter(m=>m.provider_id);
+    if(provs.length){
+      html += `<div class="grp">Custom providers</div>`;
+      for(const m of provs)
+        html += `<div class="opt" onclick="pickModel('${esc(m.id)}','${esc(m.group)}','${esc(m.provider_id)}','${esc(m.kind||'')}')">${esc(m.id)}<span class="sub">${esc(m.group)}</span></div>`;
     }
     $('mdd').innerHTML = html;
+    setModelUI();
   }catch(e){ toast('Models: '+e.message); }
 }
 

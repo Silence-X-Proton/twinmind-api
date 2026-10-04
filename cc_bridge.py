@@ -321,14 +321,15 @@ def extract_tool_calls(text: str, allowed: Optional[set] = None) -> tuple[str, l
 # --------------------------------------------------------------------------- #
 # TwinMind call                                                                #
 # --------------------------------------------------------------------------- #
-async def run_twinmind(query: str) -> str:
+async def run_twinmind(query: str, model_id: str = "") -> str:
     """Run one TwinMind chat and return the full assistant text."""
     if POOL is None:
         raise RuntimeError("bridge pool not configured")
+    use_model = (model_id or AGENT_MODEL or "auto").strip()
     payload = {
         "type": "app", "version": 1, "response_version": 1,
         "query": query,
-        "model": {"model_name": AGENT_MODEL} if AGENT_MODEL and AGENT_MODEL != "auto" else "auto",
+        "model": {"model_name": use_model} if use_model and use_model != "auto" else "auto",
         "context": None,
         "client": {"platform": "web", "timezone": os.environ.get("TWINMIND_TZ", "Asia/Kolkata"),
                    "client_time": time.strftime("%Y-%m-%dT%H:%M:%S.000Z", time.gmtime()),
@@ -389,7 +390,7 @@ async def run_twinmind(query: str) -> str:
     raise RuntimeError(f"all accounts failed: {last}")
 
 
-async def run_with_fallback(body: dict) -> tuple[str, list[dict], int]:
+async def run_with_fallback(body: dict, model_id: str = "") -> tuple[str, list[dict], int]:
     """Run TwinMind, retrying only when it refuses (rare with JSON framing)."""
     tools = filter_tools(body.get("tools") or [])
     allowed = {t.get("name") for t in tools}
@@ -400,7 +401,7 @@ async def run_with_fallback(body: dict) -> tuple[str, list[dict], int]:
     last_raw = ""
     for q in attempts:
         try:
-            raw = await run_twinmind(q)
+            raw = await run_twinmind(q, model_id)
         except Exception:
             continue
         last_raw = raw
@@ -438,11 +439,15 @@ async def messages(request: Request):
                 _g.write(f"tools={len(tools_in)} names={[t.get('name') for t in tools_in]}\n")
         except Exception:
             pass
+    # The agent studio can pick the TwinMind model per request via this header;
+    # Claude Code itself forwards it because cc_agent sets ANTHROPIC_CUSTOM_HEADERS.
+    tm_model = (request.headers.get("x-twinmind-model")
+                or request.headers.get("x-twinmind-agent-model") or "").strip()
     model = body.get("model") or AGENT_MODEL
     stream = bool(body.get("stream"))
 
     try:
-        visible, calls, in_tok = await run_with_fallback(body)
+        visible, calls, in_tok = await run_with_fallback(body, tm_model)
     except Exception as e:
         return JSONResponse({"type": "error", "error": {"type": "api_error",
                              "message": str(e)}}, status_code=502)
