@@ -19,6 +19,8 @@ router = APIRouter(prefix="/agent")
 HERE = os.path.dirname(os.path.abspath(__file__))
 GATEWAY_BASE = os.environ.get("TWINMIND_GATEWAY_BASE", "http://127.0.0.1:{port}/v1")
 MAX_UPLOAD = int(os.environ.get("TWINMIND_MAX_UPLOAD", str(25 * 1024 * 1024)))
+HEARTBEAT = float(os.environ.get("TWINMIND_AGENT_HEARTBEAT", "10"))
+MAX_TURNS = int(os.environ.get("TWINMIND_AGENT_MAX_TURNS", "30"))
 
 
 def _gateway_base() -> str:
@@ -33,6 +35,25 @@ def _gateway_key() -> str:
 
 def _sse(obj: dict) -> str:
     return "data: " + json.dumps(obj, ensure_ascii=False) + "\n\n"
+
+
+async def _with_heartbeat(agen, hb: float = 10.0):
+    """Yield events from `agen`, injecting keep-alive heartbeats when it stalls.
+
+    Long prompts make the model (and the TwinMind bridge) think for a while with
+    no event in between; without this the UI looks frozen. We emit a tiny
+    'heartbeat' event every `hb` seconds so the browser always shows progress.
+    """
+    it = agen.__aiter__()
+    while True:
+        try:
+            ev = await asyncio.wait_for(it.__anext__(), timeout=hb)
+        except asyncio.TimeoutError:
+            yield {"type": "heartbeat"}
+            continue
+        except StopAsyncIteration:
+            return
+        yield ev
 
 
 # --------------------------------------------------------------------------- #
@@ -272,11 +293,12 @@ async def chat(sid: str, request: Request):
         try:
             if engine == "claude":
                 prompt = user_content
-                async for ev in cc_agent.stream_claude(
+                async for ev in _with_heartbeat(cc_agent.stream_claude(
                     prompt, workspace,
                     claude_session_id=meta.get("claude_session_id") or "",
                     model=model, provider=provider,
-                ):
+                    max_turns=MAX_TURNS,
+                ), HEARTBEAT):
                     if await request.is_disconnected():
                         break
                     t = ev.get("type")
@@ -307,10 +329,10 @@ async def chat(sid: str, request: Request):
                 else:
                     history = [{"role": m["role"], "content": m["content"]}
                                for m in store.get_messages(sid) if m.get("role") in ("user", "assistant")]
-                    async for ev in cc_agent.stream_openai(
+                    async for ev in _with_heartbeat(cc_agent.stream_openai(
                         history, base_url=base_url, api_key=api_key,
                         model=model or "auto",
-                    ):
+                    ), HEARTBEAT):
                         if await request.is_disconnected():
                             break
                         if ev.get("type") == "text":
